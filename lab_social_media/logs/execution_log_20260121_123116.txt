@@ -1,0 +1,103 @@
+================================================================================
+LOG DE EJECUCIÓN PARALELA - SCRAPERS DE REDES SOCIALES
+================================================================================
+
+Fecha: 2026-01-21 12:31:16
+Tiempo total: 169.77 segundos
+
+--------------------------------------------------------------------------------
+RED SOCIAL: X (Twitter)
+Estado: success
+Tiempo de ejecución: 70.21s
+
+Salida:
+=== Starting Lab Social Media Extraction ===
+
+--- Configuration ---
+Search topic: python
+Number of posts: 5
+Comments per post: 5
+Loaded previous session state.
+Checking if already logged in...
+Sleeping for 3.12 seconds...
+Already logged in!
+Searching for: python
+Sleeping for 7.70 seconds...
+
+Example: Extracting 5 comments for each of the 5 tweets...
+[1/5] Getting comments for tweet by Sriram Ammangi Velamur @techieV2 � 13s
+  Accessing tweet: https://x.com/techieV2/status/2014027332718305760
+Slee
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Instagram
+Estado: success
+Tiempo de ejecución: 100.92s
+
+Salida:
+Search topic: python
+Number of posts: 5
+Comments per post: 5
+Navigating to Instagram...
+Searching for 'python'...
+Direct navigation to: https://www.instagram.com/explore/tags/python/
+Extracting posts...
+Detected 18 potential posts. We will process up to 5.
+Processing post 1...
+  Extracting comments...
+  Closing modal...
+Processing post 2...
+  Extracting comments...
+  Closing modal...
+Processing post 3...
+  Extracting comments...
+  Closing modal...
+Processing post 4...
+  Extracting comments...
+  
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Facebook
+Estado: success
+Tiempo de ejecución: 169.55s
+
+Salida:
+Search topic: python
+Number of posts: 5
+Comments per post: 5
+Navigating to Facebook...
+Searching for 'python'...
+Scrolling to load enough posts (Goal: 5)...
+  Scroll 1: Approx. 13 posts found...
+Extracting posts...
+Processing up to 5 items from 13 found elements...
+  [1] Attempting to open comments (Target: 5)...
+    Comments opened in a dialog/modal.
+    Switched to 'All comments' filter.
+  [2] Attempting to open comments (Target: 5)...
+    No comment button found (or comments disabled).
+  [2] 
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: LinkedIn
+Estado: error
+Tiempo de ejecución: 85.19s
+
+Código de error: 1
+Error:
+Traceback (most recent call last):
+  File "C:\Users\EleXc\Music\limpieza_scratching\lab_social_media\linkedin_scrapper\main.py", line 154, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "C:\Python314\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Python314\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Python314\Lib\
+--------------------------------------------------------------------------------
+

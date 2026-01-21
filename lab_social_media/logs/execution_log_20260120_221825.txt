@@ -1,0 +1,93 @@
+================================================================================
+LOG DE EJECUCIÓN PARALELA - SCRAPERS DE REDES SOCIALES
+================================================================================
+
+Fecha: 2026-01-20 22:18:25
+Tiempo total: 102.64 segundos
+
+--------------------------------------------------------------------------------
+RED SOCIAL: X (Twitter)
+Estado: success
+Tiempo de ejecución: 70.72s
+
+Salida:
+=== Starting Lab Social Media Extraction ===
+
+--- Configuration ---
+Search topic: martes
+Number of posts: 5
+Comments per post: 5
+Loaded previous session state.
+Checking if already logged in...
+Sleeping for 4.43 seconds...
+Already logged in!
+Searching for: martes
+Sleeping for 5.23 seconds...
+
+Example: Extracting 5 comments for each of the 5 tweets...
+[1/5] Getting comments for tweet by Santiago Llamas @SantiagoLLamas � 5s
+  Accessing tweet: https://x.com/SantiagoLLamas/status/2013813027837980744
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Instagram
+Estado: success
+Tiempo de ejecución: 102.49s
+
+Salida:
+Search topic: martes
+Number of posts: 5
+Comments per post: 5
+Navigating to Instagram...
+Searching for 'martes'...
+Direct navigation to: https://www.instagram.com/explore/tags/martes/
+Extracting posts...
+Detected 18 potential posts. We will process up to 5.
+Processing post 1...
+  Extracting comments...
+  Closing modal...
+Processing post 2...
+  Extracting comments...
+  Closing modal...
+Processing post 3...
+  Extracting comments...
+  Closing modal...
+Processing post 4...
+  Extracting comments...
+  
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Facebook
+Estado: success
+Tiempo de ejecución: 71.36s
+
+Salida:
+Search topic: martes
+Number of posts: 5
+Comments per post: 5
+Navigating to Facebook...
+Searching for 'martes'...
+Scrolling to load enough posts (Goal: 5)...
+  Scroll 1: Approx. 14 posts found...
+Extracting posts...
+Processing up to 5 items from 14 found elements...
+  [1] Attempting to open comments...
+    Comments opened in a dialog/modal.
+    Fallback semantic search for comments...
+    Notice: Comment section skip (cannot access local variable 'post_text' where it is not associated with a valu
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: LinkedIn
+Estado: error
+Tiempo de ejecución: 1.71s
+
+Código de error: 2
+Error:
+usage: main.py [-h] [--query QUERY] [--limit LIMIT]
+main.py: error: unrecognized arguments: --posts 5 --comments 5
+
+--------------------------------------------------------------------------------
+

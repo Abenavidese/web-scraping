@@ -1,0 +1,99 @@
+================================================================================
+LOG DE EJECUCIÓN PARALELA - SCRAPERS DE REDES SOCIALES
+================================================================================
+
+Fecha: 2026-01-21 12:34:33
+Tiempo total: 82.16 segundos
+
+--------------------------------------------------------------------------------
+RED SOCIAL: X (Twitter)
+Estado: success
+Tiempo de ejecución: 72.66s
+
+Salida:
+=== Starting Lab Social Media Extraction ===
+
+--- Configuration ---
+Search topic: tema
+Number of posts: 3
+Comments per post: 3
+Loaded previous session state.
+Checking if already logged in...
+Sleeping for 4.46 seconds...
+Already logged in!
+Searching for: tema
+Sleeping for 5.23 seconds...
+
+Example: Extracting 3 comments for each of the 3 tweets...
+[1/3] Getting comments for tweet by Daiana �La Zurdita�  @daianap04758264 � 3s
+  Accessing tweet: https://x.com/daianap04758264/status/20140286237878193
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Instagram
+Estado: success
+Tiempo de ejecución: 81.80s
+
+Salida:
+Search topic: tema
+Number of posts: 3
+Comments per post: 3
+Navigating to Instagram...
+Searching for 'tema'...
+Direct navigation to: https://www.instagram.com/explore/tags/tema/
+Extracting posts...
+Detected 18 potential posts. We will process up to 3.
+Processing post 1...
+  Extracting comments...
+  Closing modal...
+Processing post 2...
+  Extracting comments...
+  Closing modal...
+Processing post 3...
+  Extracting comments...
+  Closing modal...
+Found 3 posts.
+Data saved to Resultados\results_tema.j
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Facebook
+Estado: success
+Tiempo de ejecución: 80.77s
+
+Salida:
+Search topic: tema
+Number of posts: 3
+Comments per post: 3
+Navigating to Facebook...
+Searching for 'tema'...
+Scrolling to load enough posts (Goal: 3)...
+  Scroll 1: Approx. 8 posts found...
+Extracting posts...
+Processing up to 3 items from 8 found elements...
+  [1] Attempting to open comments (Target: 3)...
+    Comments opened in a dialog/modal.
+    Switched to 'All comments' filter.
+  [2] Attempting to open comments (Target: 3)...
+    No comment button found (or comments disabled).
+  [2] Attemp
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: LinkedIn
+Estado: success
+Tiempo de ejecución: 47.39s
+
+Salida:
+--- Iniciando Proceso para: 'tema' ---
+--- Configuraci�n: 3 posts | Max 3 comentarios/post ---
+1. Extrayendo datos de LinkedIn (Simulado v�a Google para seguridad)...
+[LinkedInScraper] Inyectando cookie de sesi�n...
+[LinkedInScraper] Buscando 'tema' en LinkedIn...
+[LinkedInScraper] Iniciando extracci�n. Meta: 3 posts.
+   ...scrolleando (Intento 1/5 sin nuevos posts)...
+   ...scrolleando (Intento 2/5 sin nuevos posts)...
+   [1/3] Post de Bety Garfias Ramirez | Comentarios: 0
+   ...scrolleando par
+--------------------------------------------------------------------------------
+

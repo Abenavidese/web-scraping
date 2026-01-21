@@ -1,0 +1,92 @@
+================================================================================
+LOG DE EJECUCIÓN PARALELA - SCRAPERS DE REDES SOCIALES
+================================================================================
+
+Fecha: 2026-01-21 15:44:47
+Tiempo total: 115.25 segundos
+
+--------------------------------------------------------------------------------
+RED SOCIAL: X (Twitter)
+Estado: success
+Tiempo de ejecución: 33.28s
+
+Salida:
+=== Starting Lab Social Media Extraction ===
+
+--- Configuration ---
+Search topic: cristian zamora
+Number of posts: 5
+Comments per post: 5
+Loaded previous session state.
+Checking if already logged in...
+An error occurred during scraping: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://x.com/home", waiting until "load"
+
+No tweets collected. Exiting.
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Instagram
+Estado: success
+Tiempo de ejecución: 41.55s
+
+Salida:
+Search topic: cristian zamora
+Number of posts: 5
+Comments per post: 5
+Navigating to Instagram...
+Searching for 'cristian zamora'...
+Direct navigation to: https://www.instagram.com/explore/tags/cristian zamora/
+Extracting posts...
+Detected 0 potential posts. We will process up to 5.
+Found 0 posts.
+Data saved to Resultados\results_cristian zamora.json
+
+--- Starting Automatic Text Processing ---
+Iniciando procesamiento de texto...
+Processed 0 new posts.
+Processed text saved to: Resultados\processed
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Facebook
+Estado: success
+Tiempo de ejecución: 115.12s
+
+Salida:
+Search topic: cristian zamora
+Number of posts: 5
+Comments per post: 5
+Navigating to Facebook...
+Searching for 'cristian zamora'...
+Scrolling to load enough posts (Goal: 5)...
+  Scroll 1: Approx. 8 posts found...
+Extracting posts...
+Processing up to 5 items from 8 found elements...
+  [1] Attempting to open comments (Target: 5)...
+    Comments opened in a dialog/modal.
+    Switched to 'All comments' filter.
+  [2] Attempting to open comments (Target: 5)...
+    No comment button found (or comments d
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: LinkedIn
+Estado: success
+Tiempo de ejecución: 107.77s
+
+Salida:
+--- Iniciando Proceso para: 'cristian zamora' ---
+--- Configuraci�n: 5 posts | Max 5 comentarios/post ---
+1. Extrayendo datos de LinkedIn (Simulado v�a Google para seguridad)...
+[LinkedInScraper] Inyectando cookie de sesi�n...
+[LinkedInScraper] Buscando 'cristian zamora' en LinkedIn...
+[LinkedInScraper] Iniciando extracci�n. Meta: 5 posts.
+   [1/5] Post de CPIA Argentina | Comentarios: 0
+   ...scrolleando para buscar m�s...
+   ...scrolleando (Intento 1/5 sin nuevos posts)...
+   ...scrolleando (I
+--------------------------------------------------------------------------------
+

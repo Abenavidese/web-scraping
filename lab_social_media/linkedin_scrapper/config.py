@@ -1,0 +1,11 @@
+# CONFIGURACIÓN DE CREDENCIALES
+# MÉTODO DE COOKIE (MÁS SEGURO Y ESTABLE)
+# 1. Ve a linkedin.com en tu navegador y logueate.
+# 2. Presiona F12 -> Pestaña "Application" (o Almacenamiento) -> Cookies -> https://www.linkedin.com
+# 3. Busca la cookie llamada "li_at". Copia su valor y pégalo abajo.
+
+LINKEDIN_LI_AT_COOKIE = "AQEDAWOWvO8B72WTAAABm9wiQ14AAAGcAC7HXk0AVZh38xj1S-cQ6IwLq0cifrPtEIr7eMoJwZTyUShkqU0nFod8Th9r5muSs5UJ9t4KzWA5iQzmRik-SRc9wS8rjCPQ0QcELlz5yu1aHdD69LlmVZmH"
+
+# Configuración de consultas por defecto (opcional)
+DEFAULT_QUERY = "Desarrollador Python Senior"
+DEFAULT_LIMIT = 5

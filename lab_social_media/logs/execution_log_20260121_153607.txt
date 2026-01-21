@@ -1,0 +1,95 @@
+================================================================================
+LOG DE EJECUCIÓN PARALELA - SCRAPERS DE REDES SOCIALES
+================================================================================
+
+Fecha: 2026-01-21 15:36:07
+Tiempo total: 519.27 segundos
+
+--------------------------------------------------------------------------------
+RED SOCIAL: X (Twitter)
+Estado: success
+Tiempo de ejecución: 34.61s
+
+Salida:
+=== Starting Lab Social Media Extraction ===
+
+--- Configuration ---
+Search topic: cristian zamora
+Number of posts: 20
+Comments per post: 100
+Loaded previous session state.
+Checking if already logged in...
+An error occurred during scraping: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://x.com/home", waiting until "load"
+
+No tweets collected. Exiting.
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Instagram
+Estado: success
+Tiempo de ejecución: 48.71s
+
+Salida:
+Search topic: cristian zamora
+Number of posts: 20
+Comments per post: 100
+Navigating to Instagram...
+Searching for 'cristian zamora'...
+Direct navigation to: https://www.instagram.com/explore/tags/cristian zamora/
+Extracting posts...
+Detected 0 potential posts. We will process up to 20.
+Found 0 posts.
+Data saved to Resultados\results_cristian zamora.json
+
+--- Starting Automatic Text Processing ---
+Iniciando procesamiento de texto...
+Processed 0 new posts.
+Processed text saved to: Resultados\proce
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: Facebook
+Estado: success
+Tiempo de ejecución: 519.09s
+
+Salida:
+Search topic: cristian zamora
+Number of posts: 20
+Comments per post: 100
+Navigating to Facebook...
+Searching for 'cristian zamora'...
+Scrolling to load enough posts (Goal: 20)...
+  Scroll 1: Approx. 8 posts found...
+  Scroll 2: Approx. 14 posts found...
+  Scroll 3: Approx. 15 posts found...
+  Scroll 4: Approx. 18 posts found...
+  Scroll 5: Approx. 20 posts found...
+Extracting posts...
+Processing up to 20 items from 20 found elements...
+  [1] Attempting to open comments (Target: 100)...
+    Comme
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+RED SOCIAL: LinkedIn
+Estado: error
+Tiempo de ejecución: 269.10s
+
+Código de error: 1
+Error:
+Traceback (most recent call last):
+  File "C:\Users\EleXc\Music\limpieza_scratching\lab_social_media\linkedin_scrapper\main.py", line 170, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "C:\Python314\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Python314\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Python314\Lib\
+--------------------------------------------------------------------------------
+
