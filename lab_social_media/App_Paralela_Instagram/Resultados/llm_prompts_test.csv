@@ -1,0 +1,91 @@
+post_id,post_url,num_comments,llm_prompt
+DTYXFgGDFGw,https://www.instagram.com/p/DTYXFgGDFGw/,3,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by prommqueeniz✨ on January 11, 2026. May be a Twitter screenshot of one or more people, heads...
+
+COMENTARIOS (3):
+1. AQSFXGCHVJBKNLMŞ
+2. Ekran sürem yetti 🙂
+3. Hmm galiba elinde kuran da varmıydı
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DTvtgOJD7bo,https://www.instagram.com/p/DTvtgOJD7bo/,3,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by The Sopranos Out of Context in Prozac Acres. May be a meme of text that says 'Life is putti...
+
+COMENTARIOS (3):
+1. Madon’ 💊 #prozac #life #test #thesopranos #tonysoprano
+2. Thats so real Tony 🥀❤️‍🩹
+3. that's on god. you hear what i said, ton?
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DRW_cnikxty,https://www.instagram.com/p/DRW_cnikxty/,3,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by Series 🗡️ on November 22, 2025. May be an image of studying, ticket stub and text.
+
+COMENTARIOS (3):
+1. #friends #togetherforever #girls #schoollife #test #fail #zero
+2. ❤️🔥🔥
+3. 🔥🙌
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DRm7GVOCNNQ,https://www.instagram.com/p/DRm7GVOCNNQ/,3,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by Insulte Moi Bien in Lyon. May be pop art of poster, crossword puzzle and text.
+
+COMENTARIOS (3):
+1. Lisez la ligne 3 🤓
+2. @sarrauteanthony64 😂🙌
+3. 😂😂😂😂🤣🤣🤣🤣👏👏👍👍😂👌
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DT0YH0Ukq89,https://www.instagram.com/p/DT0YH0Ukq89/,3,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by Info Jabodetabekci on January 22, 2026. May be an image of office and text.
+
+COMENTARIOS (3):
+1. Silahkan dicoba.
+2. Mau kerja tapi CV belum siap? 🚀 Jasa bikin CV & surat lamaran profesional cuma 15K, rapi, HR-friendly, dan bisa bayar di akhir ✅
+3. Close?
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"

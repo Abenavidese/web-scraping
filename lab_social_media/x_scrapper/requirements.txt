@@ -4,3 +4,5 @@ nltk
 matplotlib
 wordcloud
 textblob
+python-dotenv
+openai

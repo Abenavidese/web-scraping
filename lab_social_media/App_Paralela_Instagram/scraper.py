@@ -6,8 +6,35 @@ import time
 import json
 from playwright.sync_api import sync_playwright
 
-def random_sleep(min_seconds=2, max_seconds=5):
-    time.sleep(random.uniform(min_seconds, max_seconds))
+def smart_sleep(min_seconds=0.5, max_seconds=2, probability=0.5):
+    """
+    Sleeps conditionally to simulate human behavior and avoid detection.
+    
+    Args:
+        min_seconds: Minimum sleep time
+        max_seconds: Maximum sleep time  
+        probability: Probability of actually sleeping (0.0 to 1.0)
+    """
+    if random.random() < probability:
+        time.sleep(random.uniform(min_seconds, max_seconds))
+
+def format_hashtag(query):
+    """
+    Converts multi-word queries to CamelCase hashtags.
+    Example: "Cristian Zamora" -> "CristianZamora"
+    """
+    # Remove special characters and extra spaces
+    query = query.strip()
+    
+    # If contains spaces, convert to CamelCase
+    if ' ' in query:
+        words = query.split()
+        # Capitalize first letter of each word and join
+        camel_case = ''.join(word.capitalize() for word in words)
+        return camel_case
+    
+    # If no spaces, return as-is (single word)
+    return query
 
 def run(search_query=None, num_posts=None, num_comments=None):
     # Argumentos compatibles con master_scraper.py
@@ -53,17 +80,21 @@ def run(search_query=None, num_posts=None, num_comments=None):
         
         print("Navigating to Instagram...")
         page.goto("https://www.instagram.com/")
-        random_sleep(3, 6)
+        smart_sleep(2, 3, probability=1.0)  # Always wait for initial load
         
         # Search functionality
         print(f"Searching for '{search_query}'...")
         
+        # Format hashtag for multi-word queries
+        formatted_query = format_hashtag(search_query)
+        print(f"Formatted hashtag: #{formatted_query}")
+        
         # Click search icon (SVG or aria-label) - Instagram UI changes frequently, so we try a few strategies or go directly to URL
         # Strategy A: Go directly to explore/tags
-        tag_url = f"https://www.instagram.com/explore/tags/{search_query}/"
+        tag_url = f"https://www.instagram.com/explore/tags/{formatted_query}/"
         print(f"Direct navigation to: {tag_url}")
         page.goto(tag_url)
-        random_sleep(4, 7)
+        smart_sleep(2, 4, probability=1.0)  # Always wait for search results
         
         # Check if login failed or page didn't load
         if "login" in page.url:
@@ -99,7 +130,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             
             # Scroll into view if needed
             thumbnail.scroll_into_view_if_needed()
-            random_sleep(3, 5) # Increased delay before clicking
+            smart_sleep(1, 2, probability=0.6)  # Sometimes wait before clicking
             
             # Get URL for reference
             post_url_suffix = thumbnail.get_attribute("href")
@@ -110,7 +141,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             
             # Wait for modal to appear.
             # Usually looking for an <article> inside a dialog or purely the URL change
-            random_sleep(5, 8) # Longer wait for modal to seem human
+            smart_sleep(2, 4, probability=1.0)  # Always wait for modal
             
             # Extract Data from Modal
             # 1. Image
@@ -163,7 +194,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             # Find close button (SVG path usually X) or press Escape
             print("  Closing modal...")
             page.keyboard.press("Escape")
-            random_sleep(4, 6) # Wait after closing before next action
+            smart_sleep(1.5, 3, probability=0.8)  # Usually wait after closing
             
             count += 1
             
@@ -225,8 +256,51 @@ def run(search_query=None, num_posts=None, num_comments=None):
             
             print(f"Analysis complete. Image saved to: {output_img}")
             
+            # --- Sentiment Analysis Integration ---
+            try:
+                print("\n--- Starting Sentiment Analysis (Hugging Face - FREE) ---")
+                import sentiment_prep
+                import sentiment_analyzer_hf as sentiment_analyzer
+                
+                # Prepare sentiment data
+                print("Preparing sentiment data...")
+                df_sentiment = sentiment_prep.prepare_sentiment_data_instagram(filename)
+                
+                if not df_sentiment.empty:
+                    # Save sentiment input
+                    sentiment_input_path = os.path.join(output_dir, f"sentiment_input_{search_query}.csv")
+                    df_sentiment.to_csv(sentiment_input_path, index=False, encoding='utf-8')
+                    print(f"Sentiment input saved to: {sentiment_input_path}")
+                    
+                    # Generate LLM prompts
+                    prompts_path = os.path.join(output_dir, f"llm_prompts_{search_query}.csv")
+                    sentiment_prep.generate_llm_prompts_csv_instagram(df_sentiment, prompts_path)
+                    
+                    # Run sentiment analysis with Hugging Face (FREE!)
+                    print("\nAnalyzing sentiment with Hugging Face (100% FREE)...")
+                    sentiment_results_path = os.path.join(output_dir, f"sentiment_results_{search_query}.csv")
+                    df_results = sentiment_analyzer.main_sentiment_analysis_instagram(
+                        input_csv=sentiment_input_path,
+                        output_csv=sentiment_results_path
+                    )
+                    
+                    print(f"\n✅ Sentiment analysis complete!")
+                    print(f"Results saved to: {sentiment_results_path}")
+                else:
+                    print("No posts with comments found for sentiment analysis.")
+                    
+            except ImportError as e:
+                print(f"\n⚠️ Sentiment analysis modules not available: {e}")
+                print("Install required packages: pip install requests python-dotenv")
+            except Exception as e:
+                print(f"\n⚠️ Error during sentiment analysis: {e}")
+                print("Make sure HUGGINGFACE_API_KEY is set in .env")
+                print("Get your FREE API key at: https://huggingface.co/settings/tokens")
+
+            
         except Exception as e:
             print(f"Error during text processing: {e}")
+
 
 if __name__ == "__main__":
     run()

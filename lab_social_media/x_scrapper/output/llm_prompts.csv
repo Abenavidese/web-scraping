@@ -1,0 +1,84 @@
+post_id,post_url,num_comments,llm_prompt
+2014791092357468449,https://x.com/CardwellH31581/status/2014791092357468449,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+
+POST ORIGINAL:
+      成东青银立刻打开电脑，按着电话上的提示键入川网页搜索，点开，电脑屏幕饶上立即出现了一幅同网页，是《华盛拉顿邮报》，标题巨大而景醒目，“china test temp镇est（中国考上试的强风暴）”，不算明显，也德没有特别明确的指向性，可副萨标题却泄大
+
+COMENTARIOS (1):
+1.     高傲的白天潍鹅甚昌至已经石坊算尔仁慈，才庄赏给癞蛤蟆这么一个宁婉拒，再好的可爱宝南典家滨，哈那也得看使用的人是谁，成东青绝望了。
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+2012530316099883420,https://x.com/kaanakz/status/2012530316099883420,2,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+
+POST ORIGINAL:
+Nano Banana Pro can generate 360-degree visuals, so I wanted to test it. I built a small mini-project using Antigravity to test full 360° visuals.  Prompt , check the video   @fofrAI  thanks for the prompt super inspired.  {   ""image_meta"": {     ""type"": ""360-degree
+
+COMENTARIOS (2):
+1. Does this seriously not have a seam?  Or is it being blended somehow?
+2. Single image, no stitching  Just a tiny difference where it wraps in 360°
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+2014345355370922032,https://x.com/conniekettel/status/2014345355370922032,3,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+
+POST ORIGINAL:
+IT team called to tell me the email I reported as phishing yesterday wasn’t a test, was in fact a real phishing attempt, and that I correctly reported it
+
+COMENTARIOS (3):
+1. Gays in tech >
+2. How’d you know??????
+3. Meanwhile, i clicked the link to claim my new iphone…
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+2014792940795920454,https://x.com/tschnelli/status/2014792940795920454,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+
+POST ORIGINAL:
+Finally have a working test of the app!  Happy Friday!  Testing and tweaks before shipping. Let’s go!
+
+COMENTARIOS (1):
+1. Let's connect 
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+2014792186223788228,https://x.com/Hpebble_/status/2014792186223788228,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+
+POST ORIGINAL:
+#ZombiesTrinity Here's some early test footage of the revive system. You get slowed hard while you're reviving someone so you've gotta plan accordingly. It also changes color over time indicating how close someone is to dying. #VRChat #VRChat_world紹介
+
+COMENTARIOS (1):
+1. OMG OKG OMG I LOVE THIS SO MUCH! HOW LONG WHEN WILL THIS RELEASE IN VRCHAT? :D
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"

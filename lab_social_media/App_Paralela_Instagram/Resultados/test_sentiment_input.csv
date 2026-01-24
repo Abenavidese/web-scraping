@@ -1,0 +1,4 @@
+post_id,post_url,post_caption,image_url,num_comments,comments_raw,comments_json,sentiment,sentiment_score,sentiment_reasoning
+test1,https://instagram.com/p/test1/,Amazing sunset at the beach! 🌅,https://example.com/image1.jpg,3,"Beautiful! Love this! | Wow, stunning colors! | This is so peaceful","[""Beautiful! Love this!"", ""Wow, stunning colors!"", ""This is so peaceful""]",,,
+test2,https://instagram.com/p/test2/,New product launch - what do you think?,https://example.com/image2.jpg,3,"Not impressed, looks cheap | Terrible quality | Disappointed with this","[""Not impressed, looks cheap"", ""Terrible quality"", ""Disappointed with this""]",,,
+test3,https://instagram.com/p/test3/,Just another day at the office,https://example.com/image3.jpg,3,Okay | Cool | Nice,"[""Okay"", ""Cool"", ""Nice""]",,,

@@ -1,0 +1,95 @@
+post_id,post_url,num_comments,llm_prompt
+DNGLuoyviVm,https://www.instagram.com/p/DNGLuoyviVm/,5,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by The Reptile Report on August 08, 2025.
+
+COMENTARIOS (5):
+1. Which ball python would you choose? 🖤🤍 These absolute stunners are from @outbackreptiles.
+2. 😮😮😮😮😮😮🙌❤️🔥😍😍
+3. ❤️❤️❤️❤️❤️❤️❤️❤️
+4. The top one
+5. 🔥🔥
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DS4-ROUk9N0,https://www.instagram.com/p/DS4-ROUk9N0/,5,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo shared by Coder guruji on December 30, 2025 tagging @coderguru.ji. May be an image of poster, ...
+
+COMENTARIOS (5):
+1. Python Cheatsheet Save and Share It!!
+2. 🙌
+3. 🙌
+4. 🙌
+5. ❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DNa3WV6y8_L,https://www.instagram.com/p/DNa3WV6y8_L/,5,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by Pre Placement Preparations • Python • SQL • System Design on August 16, 2025.
+
+COMENTARIOS (5):
+1. Python for Everything 💯
+2. H
+3. 🔥🙌
+4. 👏👏❤️
+5. This is such a comprehensive guide! Showing how Python combines with different libraries for various applications is really helpful. From data science to web development to game development - Python truly is for everything! The visual pairings make it easy to understand which tool to use for each task. Amazing breakdown! 🔧✨
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DRq4YzNDwxm,https://www.instagram.com/p/DRq4YzNDwxm/,2,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by Ihsan Insani on November 29, 2025. May be an image of snake and text that says 'Insani Anim...
+
+COMENTARIOS (2):
+1. Beberapa kepala python dalam satu frame—masing-masing dengan karakternya sendiri.
+2. Ijin share ya mas
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"
+DT3SdMDkc67,https://www.instagram.com/p/DT3SdMDkc67/,2,"Analiza el sentimiento general de la audiencia sobre este post de Instagram basándote en los comentarios:
+
+POST ORIGINAL:
+Photo by Sujay Nadkarni - AI, Coding & Analytics Simplified on January 23, 2026. May be an image of ...
+
+COMENTARIOS (2):
+1. 30 Day Python Fast-Track Roadmap. #Python #AI #coding
+2. 🙌
+
+Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+}"

@@ -31,17 +31,24 @@ class XScraper:
             
         self.page = await self.context.new_page()
 
-    async def _human_sleep(self, min_seconds=2, max_seconds=5):
-        """Sleeps for a random amount of time to simulate human behavior."""
-        sleep_time = random.uniform(min_seconds, max_seconds)
-        print(f"Sleeping for {sleep_time:.2f} seconds...")
-        await asyncio.sleep(sleep_time)
+    async def _human_sleep(self, min_seconds=0.5, max_seconds=2, probability=0.5):
+        """Sleeps for a random amount of time to simulate human behavior.
+        
+        Args:
+            min_seconds: Minimum sleep time
+            max_seconds: Maximum sleep time
+            probability: Probability of actually sleeping (0.0 to 1.0)
+        """
+        # Only sleep based on probability to avoid predictable patterns
+        if random.random() < probability:
+            sleep_time = random.uniform(min_seconds, max_seconds)
+            await asyncio.sleep(sleep_time)
 
     async def login(self, username, password):
         """Logs into X.com."""
         print("Checking if already logged in...")
         await self.page.goto("https://x.com/home")
-        await self._human_sleep(3, 5)
+        await self._human_sleep(2, 3, probability=1.0)
         
         try:
             await self.page.wait_for_selector("a[data-testid='AppTabBar_Home_Link']", timeout=5000)
@@ -51,7 +58,7 @@ class XScraper:
             print("Not logged in. Proceeding to login page...")
         
         await self.page.goto("https://x.com/i/flow/login")
-        await self._human_sleep(4, 7)
+        await self._human_sleep(2, 4, probability=1.0)
 
         # Enter Username
         print("Entering username...")
@@ -59,9 +66,9 @@ class XScraper:
             input_selector = "input[autocomplete='username']"
             await self.page.wait_for_selector(input_selector, timeout=10000)
             await self.page.fill(input_selector, username)
-            await self._human_sleep(1, 3)
+            await self._human_sleep(0.5, 1, probability=0.7)
             await self.page.keyboard.press("Enter")
-            await self._human_sleep(3, 5)
+            await self._human_sleep(1.5, 3, probability=1.0)
         except Exception as e:
             print(f"Username step skipped/failed: {e}")
 
@@ -71,9 +78,9 @@ class XScraper:
             password_selector = "input[name='password']"
             await self.page.wait_for_selector(password_selector, timeout=10000)
             await self.page.fill(password_selector, password)
-            await self._human_sleep(2, 4)
+            await self._human_sleep(0.5, 1.5, probability=0.7)
             await self.page.keyboard.press("Enter")
-            await self._human_sleep(5, 8)
+            await self._human_sleep(3, 5, probability=1.0)
         except Exception as e:
             print(f"Password step skipped/failed: {e}")
 
@@ -95,9 +102,9 @@ class XScraper:
     async def scrape_search(self, query, count=50):
         """Scrapes tweets for a given search query."""
         print(f"Searching for: {query}")
-        # Use 'f=live' to get latest tweets or just standard search
-        await self.page.goto(f"https://x.com/search?q={query}&src=typed_query&f=live")
-        await self._human_sleep(5, 8)
+        # Search for TOP tweets (most popular/engagement) instead of latest
+        await self.page.goto(f"https://x.com/search?q={query}&src=typed_query")
+        await self._human_sleep(2, 4, probability=1.0)
 
         tweets_data = []
         last_height = await self.page.evaluate("document.body.scrollHeight")
@@ -159,7 +166,7 @@ class XScraper:
 
             # Scroll down
             await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await self._human_sleep(3, 6)
+            await self._human_sleep(1, 2.5, probability=0.6)
             
             new_height = await self.page.evaluate("document.body.scrollHeight")
             if new_height == last_height:
@@ -168,7 +175,7 @@ class XScraper:
                 if consecutive_scrolls_without_new_tweets > 3:
                      # Attempt small scroll up to trigger load
                     await self.page.evaluate("window.scrollBy(0, -300)")
-                    await self._human_sleep(2, 4)
+                    await self._human_sleep(1, 2, probability=0.8)
             else:
                 consecutive_scrolls_without_new_tweets = 0
                 
@@ -185,7 +192,7 @@ class XScraper:
         try:
             # Increase timeout for specific tweet page loading
             await self.page.goto(tweet_url, timeout=60000, wait_until='domcontentloaded')
-            await self._human_sleep(3, 5)
+            await self._human_sleep(1.5, 3, probability=0.8)
             
             comments = []
             
@@ -230,7 +237,7 @@ class XScraper:
                     
                 # Scroll a bit
                 await self.page.evaluate("window.scrollBy(0, 500)")
-                await self._human_sleep(1, 2)
+                await self._human_sleep(0.5, 1.5, probability=0.4)
                 
                 new_height = await self.page.evaluate("document.body.scrollHeight")
                 if new_height == last_height:

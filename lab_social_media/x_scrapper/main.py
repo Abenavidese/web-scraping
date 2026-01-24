@@ -116,6 +116,52 @@ async def main():
     generate_wordcloud(all_text_corpus, output_path="output/wordcloud.png")
     plot_top_words(df_processed['processed_tokens'], n=20, output_path="output/frequency_plot.png")
     
+    # 4. Sentiment Analysis Preparation
+    print("\nPreparing Sentiment Analysis Data...")
+    from sentiment_prep import prepare_sentiment_data_with_processed, generate_llm_prompts_csv
+    
+    df_sentiment = prepare_sentiment_data_with_processed(df_processed)
+    df_sentiment.to_csv("output/sentiment_input.csv", index=False, encoding='utf-8')
+    print("Sentiment data saved to output/sentiment_input.csv")
+    
+    # Generate LLM prompts
+    generate_llm_prompts_csv(df_sentiment, output_path="output/llm_prompts.csv")
+    
+    # 5. Sentiment Analysis with OpenAI (Automatic)
+    print("\n" + "="*60)
+    print("Starting Automatic Sentiment Analysis with OpenAI...")
+    print("="*60)
+    
+    try:
+        from sentiment_analyzer import setup_openai, analyze_batch_openai
+        
+        # Configurar OpenAI
+        client = setup_openai()
+        
+        if client is not None:
+            # Analizar sentimientos
+            df_results = analyze_batch_openai(client, df_sentiment)
+            
+            # Guardar resultados
+            df_results.to_csv("output/sentiment_results.csv", index=False, encoding='utf-8')
+            print(f"\n💾 Sentiment results saved to output/sentiment_results.csv")
+            
+            # Mostrar resumen
+            print("\n📊 Sentiment Summary:")
+            sentiment_counts = df_results['sentiment'].value_counts()
+            for sentiment, count in sentiment_counts.items():
+                print(f"   {sentiment}: {count}")
+            
+            avg_score = df_results['sentiment_score'].astype(float).mean()
+            print(f"\n📈 Average sentiment score: {avg_score:.2f}")
+        else:
+            print("\n⚠️ Skipping sentiment analysis - OpenAI API key not configured")
+            print("   Set OPENAI_API_KEY in .env to enable automatic sentiment analysis")
+            
+    except Exception as e:
+        print(f"\n⚠️ Sentiment analysis failed: {e}")
+        print("   You can run it manually later with: python sentiment_analyzer.py")
+    
     print("\n=== Pipeline Completed Successfully ===")
 
 if __name__ == "__main__":

@@ -1,0 +1,59 @@
+[
+    {
+        "post_url": "https://instagram.com/p/test1/",
+        "caption_snippet": "Amazing sunset at the beach! 🌅",
+        "image_url": "https://example.com/image1.jpg",
+        "comments": [
+            {
+                "user": "user1",
+                "text": "Beautiful! Love this!"
+            },
+            {
+                "user": "user2",
+                "text": "Wow, stunning colors!"
+            },
+            {
+                "user": "user3",
+                "text": "This is so peaceful"
+            }
+        ]
+    },
+    {
+        "post_url": "https://instagram.com/p/test2/",
+        "caption_snippet": "New product launch - what do you think?",
+        "image_url": "https://example.com/image2.jpg",
+        "comments": [
+            {
+                "user": "user4",
+                "text": "Not impressed, looks cheap"
+            },
+            {
+                "user": "user5",
+                "text": "Terrible quality"
+            },
+            {
+                "user": "user6",
+                "text": "Disappointed with this"
+            }
+        ]
+    },
+    {
+        "post_url": "https://instagram.com/p/test3/",
+        "caption_snippet": "Just another day at the office",
+        "image_url": "https://example.com/image3.jpg",
+        "comments": [
+            {
+                "user": "user7",
+                "text": "Okay"
+            },
+            {
+                "user": "user8",
+                "text": "Cool"
+            },
+            {
+                "user": "user9",
+                "text": "Nice"
+            }
+        ]
+    }
+]

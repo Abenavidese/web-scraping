@@ -1,2 +1,6 @@
 playwright
 pytest-playwright
+pandas
+python-dotenv
+huggingface_hub
+
