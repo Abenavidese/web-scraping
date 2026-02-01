@@ -1,15 +1,32 @@
+# -*- coding: utf-8 -*-
 import os
+import sys
 import json
 import pandas as pd
 import time
 from sentiment_prep import create_llm_prompt
 
+# Fix Windows encoding issues for emojis
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 # Cargar variables de entorno desde .env
+# Usar ruta absoluta para compatibilidad con multiprocessing en Windows
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    import os
+    # Obtener directorio del script actual
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(script_dir, '.env')
+    load_dotenv(dotenv_path=env_path)
 except ImportError:
     print("WARNING: python-dotenv not installed. Run: pip install python-dotenv")
+
+# HARDCODED API KEY FALLBACK (for multiprocessing compatibility)
+if not os.getenv("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = ""
 
 # Importar OpenAI
 try:
@@ -111,6 +128,13 @@ def analyze_batch_openai(client, df_sentiment, model="gpt-4o-mini"):
     estimated_tokens = len(batch_prompt) // 4
     print(f"   📊 Estimated input tokens: ~{estimated_tokens}")
     
+    # Calcular max_tokens dinámicamente según número de posts
+    # Cada análisis necesita ~80 tokens (id, sentiment, score, reasoning)
+    # Agregamos 30% de buffer + overhead del JSON
+    num_posts = len(df_sentiment)
+    max_tokens_output = max(500, int(num_posts * 80 * 1.3 + 200))
+    print(f"   📤 Max output tokens: {max_tokens_output} (calculated for {num_posts} posts)")
+    
     retry_count = 3
     for attempt in range(retry_count):
         try:
@@ -130,7 +154,7 @@ def analyze_batch_openai(client, df_sentiment, model="gpt-4o-mini"):
                     }
                 ],
                 temperature=0.3,  # Baja temperatura para respuestas consistentes
-                max_tokens=500,   # Limitar respuesta (ahorra tokens)
+                max_tokens=max_tokens_output,   # Calculado dinámicamente según posts
                 response_format={"type": "json_object"}  # Forzar JSON
             )
             

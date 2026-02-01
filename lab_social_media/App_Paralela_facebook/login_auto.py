@@ -50,18 +50,25 @@ def run():
             page.click('button[name="login"]')
             
             # Wait for navigation
+        # Wait for navigation
             try:
                 page.wait_for_navigation(timeout=15000)
             except:
                 print("Wait for navigation timeout, checking state...")
 
-            random_sleep(5, 8)
+            random_sleep(3, 5)
             
-        # Check login success
-        # Look for elements present in feed, e.g., "Create Story", specific aria-labels
-        # or checking that the login form is gone
+        # Manual Confirmation Step (Crucial for stability)
+        print("\n" + "="*50)
+        print("IMPORTANTE: Observa la ventana del navegador.")
+        print("1. Si te pide verificación, código o captcha, resuélvelo manualmente.")
+        print("2. Espera hasta que veas tu muro de noticias (Feed) de Facebook.")
+        print("="*50)
+        input(">>> Cuando veas el muro de Facebook, presiona ENTER aquí para continuar...")
+
+        # Check login success (Secondary check)
         if not page.locator('input[name="email"]').is_visible():
-            print("Login appears successful.")
+            print("Login confirmado.")
             
             # Save state
             context.storage_state(path="auth_fb.json")

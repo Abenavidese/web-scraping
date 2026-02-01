@@ -1,0 +1,9 @@
+selenium
+webdriver_manager
+beautifulsoup4
+nltk
+colorama
+matplotlib
+python-dotenv
+openai
+google-generativeai

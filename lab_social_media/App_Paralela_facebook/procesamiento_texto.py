@@ -4,7 +4,6 @@ import re
 import nltk
 import matplotlib.pyplot as plt
 from collections import Counter
-from wordcloud import WordCloud
 from nltk.corpus import stopwords
 from nltk.stem import SnowballStemmer
 from nltk.tokenize import word_tokenize
@@ -15,12 +14,6 @@ try:
 except LookupError:
     print("Descargando 'punkt'...")
     nltk.download('punkt')
-
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    print("Descargando 'punkt_tab'...")
-    nltk.download('punkt_tab')
 
 try:
     nltk.data.find('corpora/stopwords')
@@ -120,7 +113,7 @@ def procesar_texto(data):
 
 def visualizar_nube_palabras(tokens, nombre_archivo="reporte_palabras.png"):
     """
-    Genera un gráfico de barras con las palabras más frecuentes Y una wordcloud.
+    Genera un gráfico de barras con las palabras más frecuentes.
     """
     conteo = Counter(tokens)
     top_20 = conteo.most_common(20)
@@ -132,33 +125,16 @@ def visualizar_nube_palabras(tokens, nombre_archivo="reporte_palabras.png"):
     palabras = [x[0] for x in top_20]
     frecuencias = [x[1] for x in top_20]
     
-    # 1. Gráfico de barras
     plt.figure(figsize=(12, 6))
     plt.bar(palabras, frecuencias, color='skyblue')
     plt.xlabel('Palabras')
     plt.ylabel('Frecuencia')
-    plt.title('Top 20 Palabras Más Frecuentes')
+    plt.title('Top 20 Palabras Más Frecuentes (Instagram)')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     
     plt.savefig(nombre_archivo)
-    print(f"Gráfico de barras guardado como: {nombre_archivo}")
-    plt.close()
-    
-    # 2. WordCloud
-    text_corpus = ' '.join(tokens)
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text_corpus)
-    
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis('off')
-    plt.title('Nube de Palabras (WordCloud)')
-    
-    # Guardar wordcloud con nombre derivado del archivo original
-    wordcloud_filename = nombre_archivo.replace('.png', '_wordcloud.png')
-    plt.savefig(wordcloud_filename)
-    print(f"WordCloud guardado como: {wordcloud_filename}")
-    plt.close()
+    print(f"Gráfico guardado como: {nombre_archivo}")
     # plt.show() # Descomentar si se ejecuta en entorno con GUI
 
 def main():

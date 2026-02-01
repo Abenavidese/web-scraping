@@ -1,18 +1,45 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import os
 import sys
 import argparse
 import pandas as pd
+
+# Fix Windows encoding issues for emojis
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 from scraper import XScraper
 from processor import process_data_parallel
 from visualization import generate_wordcloud, plot_top_words
+
+# Load environment variables from .env file
+# This is critical for multiprocessing on Windows
+try:
+    from dotenv import load_dotenv
+    # Use absolute path to .env file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(script_dir, '.env')
+    load_dotenv(dotenv_path=env_path)
+except ImportError:
+    print("WARNING: python-dotenv not installed. Environment variables may not load correctly.")
 
 # CONFIGURATION
 # PLEASE UPDATE THESE VALUES OR SET ENVIRONMENT VARIABLES
 USERNAME = os.getenv("X_USERNAME", "@jsudbs61239")
 PASSWORD = os.getenv("X_PASSWORD", "xxKPeYAEI00fohS")
 
+# HARDCODED API KEY FALLBACK (for multiprocessing compatibility)
+# If .env doesn't load properly in subprocess, this ensures it works
+if not os.getenv("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = ""
+
 async def main():
+    import time
+    start_total_time = time.time()
+    
     print("=== Starting Lab Social Media Extraction ===")
     
     # ARGUMENT PARSING
@@ -38,6 +65,7 @@ async def main():
         print("WARNING: Username not set. Please edit main.py or set X_USERNAME env var.")
     
     # 1. Extraction
+    start_scraping_time = time.time()
     scraper = XScraper(headless=False) 
     await scraper.start()
     
@@ -58,6 +86,8 @@ async def main():
         print(f"An error occurred during scraping: {e}")
     finally:
         await scraper.close()
+    
+    end_scraping_time = time.time()
 
     if not tweets:
         print("No tweets collected. Exiting.")
@@ -94,10 +124,12 @@ async def main():
 
     # 2. Processing (Parallel)
     # We pass the flattened data to processor
+    start_processing_time = time.time()
     print("\nStarting Parallel Processing...")
     df_processed = process_data_parallel(flattened_data)
     df_processed.to_csv("output/tweets_processed.csv", index=False, encoding='utf-8')
     print("Processed data saved to output/tweets_processed.csv")
+    end_processing_time = time.time()
 
     # 3. Analysis & Visualization
     print("\nGenerating Visualizations...")
@@ -128,6 +160,10 @@ async def main():
     generate_llm_prompts_csv(df_sentiment, output_path="output/llm_prompts.csv")
     
     # 5. Sentiment Analysis with OpenAI (Automatic)
+    start_sentiment_time = time.time()
+    sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
+    total_items_analyzed = 0
+    
     print("\n" + "="*60)
     print("Starting Automatic Sentiment Analysis with OpenAI...")
     print("="*60)
@@ -152,6 +188,12 @@ async def main():
             for sentiment, count in sentiment_counts.items():
                 print(f"   {sentiment}: {count}")
             
+            # Calculate sentiment distribution
+            total_items_analyzed = len(df_results)
+            sentiment_distribution['positive'] = sentiment_counts.get('POSITIVE', sentiment_counts.get('positive', 0))
+            sentiment_distribution['negative'] = sentiment_counts.get('NEGATIVE', sentiment_counts.get('negative', 0))
+            sentiment_distribution['neutral'] = sentiment_counts.get('NEUTRAL', sentiment_counts.get('neutral', 0))
+            
             avg_score = df_results['sentiment_score'].astype(float).mean()
             print(f"\n📈 Average sentiment score: {avg_score:.2f}")
         else:
@@ -161,6 +203,78 @@ async def main():
     except Exception as e:
         print(f"\n⚠️ Sentiment analysis failed: {e}")
         print("   You can run it manually later with: python sentiment_analyzer.py")
+    
+    end_sentiment_time = time.time()
+    end_total_time = time.time()
+    
+    # --- PERFORMANCE METRICS REPORT ---
+    scraping_duration = end_scraping_time - start_scraping_time
+    processing_duration = end_processing_time - start_processing_time
+    sentiment_duration = end_sentiment_time - start_sentiment_time
+    total_duration = end_total_time - start_total_time
+    
+    # Count total items
+    total_tweets = len(tweets)
+    total_comments = sum(len(t.get('comments', [])) for t in tweets)
+    total_items = total_tweets + total_comments
+    
+    print("\n" + "="*50)
+    print(f"       PERFORMANCE REPORT: {SEARCH_QUERY.upper()}")
+    print("="*50)
+    print(f"Total Tweets Extracted: {total_tweets}")
+    print(f"Total Comments:         {total_comments}")
+    print(f"Items Analyzed:         {total_items_analyzed}")
+    print("-" * 50)
+    print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
+    print(f"   (Avg per tweet:      {scraping_duration/total_tweets if total_tweets else 0:.2f}s)")
+    print(f"2. Text Processing:     {processing_duration:.2f} seconds")
+    print(f"3. Sentiment Analysis:  {sentiment_duration:.2f} seconds (OpenAI)")
+    print(f"   (Avg per item:       {sentiment_duration/total_items_analyzed if total_items_analyzed else 0:.2f}s)")
+    print("-" * 50)
+    print(f"TOTAL EXECUTION TIME:   {total_duration:.2f} seconds")
+    print("="*50)
+    
+    # Generate metrics JSON for master scraper
+    # Convert numpy int64 to native Python int for JSON serialization
+    sentiment_dist_serializable = {
+        k: int(v) for k, v in sentiment_distribution.items()
+    }
+    
+    metrics = {
+        "social_network": "X (Twitter)",
+        "llm_used": "OpenAI",
+        "query": SEARCH_QUERY,
+        "execution_times": {
+            "scraping": round(scraping_duration, 2),
+            "text_processing": round(processing_duration, 2),
+            "sentiment_analysis": round(sentiment_duration, 2),
+            "total": round(total_duration, 2)
+        },
+        "data_metrics": {
+            "posts_extracted": int(total_tweets),
+            "comments_extracted": int(total_comments),
+            "comments_analyzed": int(total_items_analyzed),
+            "total_text_items": int(total_items)
+        },
+        "sentiment_distribution": sentiment_dist_serializable,
+        "performance_metrics": {
+            "posts_per_second": round(total_tweets / scraping_duration if scraping_duration > 0 else 0, 2),
+            "comments_per_second": round(total_items_analyzed / sentiment_duration if sentiment_duration > 0 else 0, 2),
+            "avg_time_per_post": round(scraping_duration / total_tweets if total_tweets > 0 else 0, 2)
+        }
+    }
+    
+    # Save metrics JSON
+    import json
+    metrics_filename = f"output/metrics_{SEARCH_QUERY}.json"
+    with open(metrics_filename, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=4, ensure_ascii=False)
+    print(f"\n📊 Metrics saved to: {metrics_filename}")
+    
+    # Print metrics in JSON format for master scraper to capture
+    print("\n### METRICS_JSON_START ###")
+    print(json.dumps(metrics, ensure_ascii=False))
+    print("### METRICS_JSON_END ###")
     
     print("\n=== Pipeline Completed Successfully ===")
 

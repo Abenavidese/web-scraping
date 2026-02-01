@@ -3,33 +3,85 @@ import json
 import time
 import random
 import re
-import argparse
 from playwright.sync_api import sync_playwright
+from ollama_sentiment import classify_comments_sentiment
 
-def random_sleep(min_seconds=2, max_seconds=5):
-    time.sleep(random.uniform(min_seconds, max_seconds))
+def sleep_largo():
+    time.sleep(1.4)
+
+def sleep_corto():
+    time.sleep(0.5)
+
+def clean_comment_text(raw_text):
+    if not raw_text: return ""
+    lines = raw_text.split('\n')
+    cleaned_lines = []
+    
+    # Regex for timestamps (e.g., "16 h", "2 d", "1 min", "3 sem")
+    # And UI junk
+    skip_patterns = [
+        r"^\d+\s?[hmds]$",       # 1 h, 2d, 5m
+        r"^\d+\s?sem$",          # 3 sem
+        r"^\d+\s?min$", 
+        r"^(Me gusta|Responder|Compartir|Like|Reply|Share|Follow|Seguir)$",
+        r"^(Ver más|See more|Ver traducción|See translation)$",
+        r"^(Editado|Edited|Autor|Author|Fans destacados|Top fan)$"
+    ]
+    
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+        
+        # Check against patterns
+        is_junk = False
+        for pat in skip_patterns:
+            if re.search(pat, line, re.IGNORECASE):
+                is_junk = True
+                break
+        
+        if not is_junk:
+            cleaned_lines.append(line)
+            
+    return " ".join(cleaned_lines)
+
+def load_env_file(env_path):
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
 
 def run():
-    # Argumentos compatibles con master_scraper.py
-    parser = argparse.ArgumentParser(description="Facebook Scraper - Extracción de Posts y Comentarios")
-    parser.add_argument("--query", type=str, default="python", help="Término de búsqueda")
-    parser.add_argument("--posts", type=int, default=5, help="Número de posts a extraer")
-    parser.add_argument("--comments", type=int, default=5, help="Número de comentarios por post")
+    import time
+    import argparse
+    start_total_time = time.time()
+    
+    # ARGUMENT PARSING
+    parser = argparse.ArgumentParser(description="Facebook Scraper")
+    parser.add_argument("--query", type=str, default=None, help="Search topic")
+    parser.add_argument("--posts", type=int, default=None, help="Number of posts to scrape")
+    parser.add_argument("--comments", type=int, default=None, help="Number of comments per post")
     
     args = parser.parse_args()
     
-    search_query = args.query
-    num_posts_to_scrape = args.posts
-    num_comments_to_scrape = args.comments
+    # Use command-line arguments with default values
+    search_query = args.query if args.query else "Inteligencia Artificial"
+    num_posts_to_scrape = args.posts if args.posts is not None else 5
+    num_comments_to_scrape = args.comments if args.comments is not None else 5
     
     print(f"Search topic: {search_query}")
     print(f"Number of posts: {num_posts_to_scrape}")
     print(f"Comments per post: {num_comments_to_scrape}")
 
-
     # Create output directory
     output_dir = "Resultados"
     os.makedirs(output_dir, exist_ok=True)
+    load_env_file(os.path.join(os.path.dirname(__file__), ".env"))
+    gemini_api_key = None
     
     with sync_playwright() as p:
         # Launch browser
@@ -67,10 +119,10 @@ def run():
         except Exception as e:
             print(f"Navigation error: {e}")
             print("Retrying navigation...")
-            random_sleep(2, 4)
+            sleep_largo()
             page.goto("https://www.facebook.com/")
 
-        random_sleep(3, 5)
+        sleep_largo()
 
         # Search
         print(f"Searching for '{search_query}'...")
@@ -78,7 +130,7 @@ def run():
         # URL format: https://www.facebook.com/search/posts/?q=query
         search_url = f"https://www.facebook.com/search/posts/?q={search_query}"
         page.goto(search_url)
-        random_sleep(5, 8)
+        sleep_largo()
         
         # Check login
         if "login" in page.url and "search" not in page.url:
@@ -86,31 +138,53 @@ def run():
              return
 
         # Scroll to load posts
-        print(f"Scrolling to load enough posts (Goal: {num_posts_to_scrape})...")
-        last_count = 0
-        
+        # We fetch extra posts (1.5x) because some might not have comments or be duplicates
+        target_buffer = int(num_posts_to_scrape * 1.5)
+        print(f"Scrolling to load posts (Target candidate pool: {target_buffer} for {num_posts_to_scrape} valid posts)...")
         # Robust multi-selector for counting posts
         post_selectors = 'div[role="article"], .x1yztbdb, [data-pagelet^="FeedUnit"], [data-ad-comet-preview="message"]'
         
-        for s in range(15):
+        # Increased scroll attempts and "wiggle" logic for stuck feeds
+        max_scroll_attempts = 30 + int(num_posts_to_scrape / 2)
+        stagnant_count = 0
+        last_count = 0
+        
+        for s in range(max_scroll_attempts):
             current_found = page.locator(post_selectors).count()
             
-            print(f"  Scroll {s+1}: Approx. {current_found} posts found...")
-            if current_found >= num_posts_to_scrape:
+            print(f"  Scroll {s+1}/{max_scroll_attempts}: Approx. {current_found} posts found...")
+            if current_found >= target_buffer:
+                break
+            
+            # Smart Scroll: Wiggle if stuck
+            if current_found == last_count:
+                stagnant_count += 1
+                if stagnant_count >= 2:
+                    print("    Feed stuck, trying to wiggle (Up/Down)...")
+                    page.mouse.wheel(0, -500) # Up a bit
+                    sleep_corto()
+                    page.mouse.wheel(0, 4000) # Down hard
+                    sleep_largo()
+                else:
+                    page.mouse.wheel(0, 3000)
+                    sleep_largo()
+            else:
+                stagnant_count = 0
+                page.mouse.wheel(0, 3000)
+                sleep_largo()
+            
+            # Give up only after significant stagnation
+            if stagnant_count > 6:
+                print("  Stopping: Feed seems genuinely finished or blocked.")
                 break
                 
-            page.mouse.wheel(0, 3000)
-            random_sleep(3, 5)
-            
-            if current_found == last_count and s > 4:
-                print("  Stopping: No more new posts loading.")
-                break
             last_count = current_found
 
 
 
         # Extract Posts
         print("Extracting posts...")
+        start_scraping_time = time.time()
         posts_data = []
         
         # Selectors for Facebook posts on the search page
@@ -135,7 +209,7 @@ def run():
             try:
                 # Scroll article into view
                 article.scroll_into_view_if_needed()
-                random_sleep(2, 3)
+                sleep_largo()
                 
                 # Check for duplicates (Robust Version)
                 try:
@@ -165,7 +239,7 @@ def run():
                     if see_more.is_visible():
                         # Force click via JS to avoid overlay issues
                         see_more.dispatch_event("click") 
-                        random_sleep(1, 2)
+                        sleep_corto()
                 except:
                     pass
 
@@ -182,6 +256,7 @@ def run():
                 # URL extraction
                 all_links = article.locator('a').all()
                 full_url = "N/A"
+                is_video_post = False
                 for link in all_links:
                     href = link.get_attribute("href")
                     if href and ("/posts/" in href or "/permalink.php" in href or "/groups/" in href or "story_fbid" in href):
@@ -191,6 +266,11 @@ def run():
                         if "/posts/" in href or "fbid=" in href or "permalink" in href:
                              full_url = href.split("?")[0] if "?" in href and "fbid" not in href else href
                              break
+                    if href and ("/watch/" in href or "/videos/" in href or "video.php" in href or "reel" in href):
+                        is_video_post = True
+
+                if article.locator("video").count() > 0:
+                    is_video_post = True
                 
                 # Image extraction
                 images = article.locator('img').all() 
@@ -206,9 +286,12 @@ def run():
                         break
                         
                 # Extract Comments
-                print(f"  [{count+1}] Attempting to open comments (Target: {num_comments_to_scrape})...")
+                print(f"  [{i+1}] Attempting to open comments (Target: {num_comments_to_scrape})...")
                 comments_list = []
                 try:
+                    if is_video_post:
+                        print("    Video/reel post detected. Trying to extract comments anyway.")
+
                     # Look for comment button by common labels or roles
                     # Facebook often uses aria-label="Comment" or "Escribe un comentario"
                     comment_btn = None
@@ -217,10 +300,13 @@ def run():
                         'div[aria-label="Comment"]',
                         'div[role="button"]:has-text("Comentar")',
                         'div[role="button"]:has-text("Comment")',
-                        'span:has-text("Comentarios")',
-                        'span:has-text("Comments")',
-                        'div[aria-label*="Leave a comment"]', 
-                        'div[aria-label*="Escribe un comentario"]'
+                        'div[role="button"]:has-text("Comentarios")',
+                        'div[role="button"]:has-text("Comments")',
+                        'div[aria-label*="Leave a comment"]',
+                        'div[aria-label*="Escribe un comentario"]',
+                        # Video/Reel specific
+                        'div[data-icon="comment"]',
+                        'i[data-visualcompletion="css-img"]'
                     ]
                     
                     found_btn = False
@@ -229,16 +315,33 @@ def run():
                         btns = article.locator(sel).all()
                         for btn in btns:
                             if btn.is_visible():
+                                href = btn.get_attribute("href")
+                                if href and ("/watch/" in href or "/videos/" in href or "video.php" in href or "reel" in href):
+                                    continue
                                 comment_btn = btn
                                 found_btn = True
                                 break
                         if found_btn: break
+
+                    if not found_btn:
+                        # Fallback: broader search for comment controls inside the post
+                        fallback_btns = article.locator('div[role="button"]').filter(
+                            has_text=re.compile(r"(comentarios|comments)", re.IGNORECASE)
+                        ).all()
+                        for btn in fallback_btns:
+                            if btn.is_visible():
+                                href = btn.get_attribute("href")
+                                if href and ("/watch/" in href or "/videos/" in href or "video.php" in href or "reel" in href):
+                                    continue
+                                comment_btn = btn
+                                found_btn = True
+                                break
                     
                     if comment_btn:
                         # Javascript click is sometimes more reliable for these react buttons that might be covered
                         # comment_btn.click() 
                         comment_btn.dispatch_event("click")
-                        random_sleep(3, 5) 
+                        sleep_largo() 
                         
                         # Detect if a dialog opened (common for Facebook photo/video posts)
                         dialog = page.locator('div[role="dialog"]').last
@@ -256,18 +359,18 @@ def run():
                             sort_menu = comment_scope.locator('div[role="button"]:has-text("Más relevantes"), div[role="button"]:has-text("Most relevant")').first
                             if sort_menu.is_visible():
                                 sort_menu.click()
-                                random_sleep(1, 2)
+                                sleep_corto()
                                 # Click "All comments"
                                 all_comments_opt = page.locator('div[role="menuitem"]:has-text("Todos los comentarios"), div[role="menuitem"]:has-text("All comments")').first
                                 if all_comments_opt.is_visible():
                                     all_comments_opt.dispatch_event("click")
                                     print("    Switched to 'All comments' filter.")
-                                    random_sleep(2, 4)
+                                    sleep_largo()
                         except:
                             pass
 
                         # Loop to load more comments if needed
-                        for _ in range(8): # Check 8 times
+                        for _ in range(5): # Reduce loops to speed up
                             current_comments_count = comment_scope.locator('div[role="article"]').count()
                             if current_comments_count >= num_comments_to_scrape:
                                 break
@@ -277,7 +380,7 @@ def run():
                                 if dialog.is_visible():
                                     dialog.click() # Focus
                                     page.keyboard.press("End") # Go to bottom
-                                    random_sleep(1, 2)
+                                    sleep_corto()
                                     page.keyboard.press("PageUp") # Wiggle a bit
                                 else:
                                     page.keyboard.press("PageDown")
@@ -296,7 +399,7 @@ def run():
                                         b.scroll_into_view_if_needed()
                                         b.dispatch_event("click")
                                         clicked_any = True
-                                        random_sleep(2, 4) # Weight for load
+                                        sleep_largo() # Weight for load
                                         break # Click one at a time to avoid errors
                                 
                                 if not clicked_any:
@@ -306,7 +409,7 @@ def run():
                                          if b.is_visible():
                                              b.scroll_into_view_if_needed()
                                              b.dispatch_event("click")
-                                             random_sleep(2, 4)
+                                             sleep_largo()
                                              break
                                              
                                 # Expand individual long comments ("See more" / "Ver más" inline)
@@ -314,12 +417,12 @@ def run():
                                 for btn in inline_see_more:
                                     if btn.is_visible():
                                          btn.dispatch_event("click")
-                                         random_sleep(0.5, 1)
+                                         sleep_corto()
 
                             except:
                                 pass
                             
-                            random_sleep(1, 2)
+                            sleep_corto()
 
 
                         # Comment text container detection
@@ -345,8 +448,11 @@ def run():
                                 else:
                                     c_text = c.inner_text().strip()
                                     
+                                    
                                 # Clean up common button text that gets grabbed
-                                if len(c_text) > 2 and c_text not in ["Me gusta", "Responder", "Like", "Reply", "Hide", "Ocultar"]:
+                                c_text = clean_comment_text(c_text)
+                                
+                                if len(c_text) > 2:
                                      comments_list.append({"user": "FB User", "text": c_text})
                                      extracted_c += 1
                         
@@ -358,8 +464,9 @@ def run():
                              for el in fallback_els:
                                  if extracted_c >= num_comments_to_scrape: break
                                  c_text = el.inner_text().strip()
+                                 c_text = clean_comment_text(c_text)
                                  # specific filtering for fallback
-                                 if len(c_text) > 3 and c_text != post_text and c_text not in ["Me gusta", "Responder", "Like", "Reply"]:
+                                 if len(c_text) > 3 and c_text != post_text:
                                      comments_list.append({"user": "FB User", "text": c_text})
                                      extracted_c += 1
 
@@ -367,7 +474,7 @@ def run():
                         if dialog.is_visible():
                             # multiple ways to close: escape, or click close button
                             page.keyboard.press("Escape")
-                            random_sleep(1, 2)
+                            sleep_corto()
                             
                     else:
                         print("    No comment button found (or comments disabled).")
@@ -383,25 +490,27 @@ def run():
                 
                 post_text = " ".join(clean_lines[:3]) 
                 
-                if not post_text and not comments_list:
-                    continue 
-
-                # FILTER: Skip empty/ghost posts (no comments, no image, no URL)
-                if not comments_list and image_url == "N/A" and full_url == "N/A":
+                if not comments_list:
                     continue
+
+                if comments_list:
+                    # Sentiment decoupled - will be processed after browser close
+                    pass
 
                 posts_data.append({
                     "post_url": full_url,
                     "caption_snippet": post_text[:200] if post_text else "No text found",
                     "image_url": img_url,
-                    "comments": comments_list
+                    "comments": comments_list,
                 })
                 count += 1
                 
             except Exception as e:
+                print(f"  Skipping post due to error: {e}")
                 continue
 
         print(f"Extracted {len(posts_data)} posts.")
+        end_scraping_time = time.time()
         
         # Save JSON to Resultados folder
         filename = os.path.join(output_dir, f"results_facebook_{search_query}.json")
@@ -411,6 +520,77 @@ def run():
         print(f"Data saved to {filename}")
         
         browser.close()
+        
+        # --- Post-Processing Sentiment Analysis ---
+        print("\n--- Starting Post-Processing Sentiment Analysis (Decoupled) ---")
+        start_sentiment_time = time.time()
+        
+        all_comments_texts = []
+        for post in posts_data:
+            for comment in post.get("comments", []):
+                all_comments_texts.append(comment.get("text", ""))
+        
+        if all_comments_texts:
+            print(f"Classifying {len(all_comments_texts)} comments with Ollama (with explainability)...")
+            try:
+                # classify_comments_sentiment ahora retorna lista de dicts con 'sentiment' y 'reasoning'
+                sentiment_results = classify_comments_sentiment(all_comments_texts, None, batch_size=15)
+                global_idx = 0
+                for post in posts_data:
+                    for comment in post.get("comments", []):
+                        if global_idx < len(sentiment_results):
+                            result = sentiment_results[global_idx]
+                            
+                            # Manejar tanto formato nuevo (dict) como antiguo (string)
+                            if isinstance(result, dict):
+                                comment["sentiment"] = result.get("sentiment", "NEUTRAL")
+                                comment["sentiment_reasoning"] = result.get("reasoning", "Sin explicación")
+                            else:
+                                # Fallback para compatibilidad con formato antiguo
+                                comment["sentiment"] = result
+                                comment["sentiment_reasoning"] = "Sin explicación disponible"
+                        else:
+                            comment["sentiment"] = "NEUTRAL"
+                            comment["sentiment_reasoning"] = "No analizado"
+                        global_idx += 1
+                print("✅ Sentiment analysis with explainability complete.")
+            except Exception as e:
+                print(f"Error during sentiment analysis: {e}")
+        
+        # Update JSON
+        with open(filename, "w", encoding="utf-8") as f:
+             json.dump(posts_data, f, indent=4, ensure_ascii=False)
+        print(f"Updated JSON with sentiments and reasoning: {filename}")
+        end_sentiment_time = time.time()
+        
+        # --- CSV Generation ---
+        import csv
+        print("Saving separated sentiment CSVs...")
+        sentiments_lists = { "positivos": [], "negativos": [], "neutros": [] }
+        
+        for post in posts_data:
+            p_url = post.get("post_url", "N/A")
+            for comment in post.get("comments", []):
+                s = comment.get("sentiment", "NEUTRAL").upper()
+                c_text = comment.get("text", "")
+                
+                if s == "POSITIVO":
+                    sentiments_lists["positivos"].append([c_text, p_url])
+                elif s == "NEGATIVO":
+                    sentiments_lists["negativos"].append([c_text, p_url])
+                else:
+                    sentiments_lists["neutros"].append([c_text, p_url])
+                    
+        for s_type, rows in sentiments_lists.items():
+            csv_name = os.path.join(output_dir, f"comentarios_{s_type}_{search_query}.csv")
+            try:
+                with open(csv_name, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["Comentario", "URL Post Original"])
+                    writer.writerows(rows)
+                print(f"  Saved {len(rows)} {s_type} comments to: {csv_name}")
+            except Exception as e:
+                print(f"  Error saving {s_type} CSV: {e}")
         
         # --- Automatic Processing ---
         try:
@@ -450,6 +630,77 @@ def run():
             output_img = os.path.join(output_dir, f"frecuencia_facebook_{search_query}.png")
             procesamiento_texto.visualizar_nube_palabras(tokens_limpios, output_img)
             print(f"Analysis complete. Image saved to: {output_img}")
+            
+            end_total_time = time.time()
+            
+            # --- FINAL PERFORMANCE REPORT ---
+            scraping_duration = end_scraping_time - start_scraping_time
+            sentiment_duration = end_sentiment_time - start_sentiment_time
+            text_processing_duration = end_total_time - end_sentiment_time
+            total_duration = end_total_time - start_total_time
+            
+            # Calculate sentiment distribution
+            sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
+            for post in posts_data:
+                for comment in post.get("comments", []):
+                    s = comment.get("sentiment", "NEUTRAL").upper()
+                    if s == "POSITIVO" or s == "POSITIVE":
+                        sentiment_distribution["positive"] += 1
+                    elif s == "NEGATIVO" or s == "NEGATIVE":
+                        sentiment_distribution["negative"] += 1
+                    else:
+                        sentiment_distribution["neutral"] += 1
+            
+            print("\n" + "="*50)
+            print(f"       PERFORMANCE REPORT: {search_query.upper()}")
+            print("="*50)
+            print(f"Total Valid Posts:      {len(datos_nuevos)}")
+            print(f"Total Comments Analyzed:{len(all_comments_texts)}")
+            print("-" * 50)
+            print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
+            print(f"   (Avg per post:       {scraping_duration/len(datos_nuevos) if len(datos_nuevos) else 0:.2f}s)")
+            print(f"2. Sentiment Analysis:  {sentiment_duration:.2f} seconds (Ollama)")
+            print(f"   (Avg per comment:    {sentiment_duration/len(all_comments_texts) if all_comments_texts else 0:.2f}s)")
+            print(f"3. Text Processing:     {text_processing_duration:.2f} seconds")
+            print("-" * 50)
+            print(f"TOTAL EXECUTION TIME:   {total_duration:.2f} seconds")
+            print("="*50)
+            
+            # Generate metrics JSON for master scraper
+            metrics = {
+                "social_network": "Facebook",
+                "llm_used": "Ollama",
+                "query": search_query,
+                "execution_times": {
+                    "scraping": round(scraping_duration, 2),
+                    "sentiment_analysis": round(sentiment_duration, 2),
+                    "text_processing": round(text_processing_duration, 2),
+                    "total": round(total_duration, 2)
+                },
+                "data_metrics": {
+                    "posts_extracted": len(datos_nuevos),
+                    "comments_extracted": len(all_comments_texts),
+                    "comments_analyzed": len(all_comments_texts),
+                    "total_text_items": len(datos_nuevos) + len(all_comments_texts)
+                },
+                "sentiment_distribution": sentiment_distribution,
+                "performance_metrics": {
+                    "posts_per_second": round(len(datos_nuevos) / scraping_duration if scraping_duration > 0 else 0, 2),
+                    "comments_per_second": round(len(all_comments_texts) / sentiment_duration if sentiment_duration > 0 else 0, 2),
+                    "avg_time_per_post": round(scraping_duration / len(datos_nuevos) if len(datos_nuevos) > 0 else 0, 2)
+                }
+            }
+            
+            # Save metrics JSON
+            metrics_filename = os.path.join(output_dir, f"metrics_{search_query}.json")
+            with open(metrics_filename, "w", encoding="utf-8") as f:
+                json.dump(metrics, f, indent=4, ensure_ascii=False)
+            print(f"\n📊 Metrics saved to: {metrics_filename}")
+            
+            # Print metrics in JSON format for master scraper to capture
+            print("\n### METRICS_JSON_START ###")
+            print(json.dumps(metrics, ensure_ascii=False))
+            print("### METRICS_JSON_END ###")
             
         except Exception as e:
             print(f"Error during text processing: {e}")
