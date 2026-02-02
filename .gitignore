@@ -1,6 +1,8 @@
 # Environment variables
 .env
 *.env
+.env.local
+.env.*.local
 
 # Python cache
 __pycache__/
@@ -31,3 +33,39 @@ logs/
 # Results and output files
 Resultados/
 output/
+
+# Node.js / Frontend
+node_modules/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Sensitive data
+cookies.json
+*cookies*.json
+*.cookie
+session_data/
+credentials/
+
+# API Keys and Tokens
+*_token.txt
+*_key.txt
+secrets/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+.pytest_cache/
+.coverage
+htmlcov/
