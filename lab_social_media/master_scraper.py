@@ -79,6 +79,41 @@ class SocialMediaScraperManager:
         print(f"🌐 Redes sociales a procesar: {', '.join(self.scrapers.keys())}\n")
         print("="*80 + "\n")
     
+    def _clean_output_directories(self):
+        """Limpia los directorios de salida de cada scraper para evitar acumulación"""
+        import shutil
+        
+        cleaned_count = 0
+        for name, config in self.scrapers.items():
+            base_dir = config['dir']
+            # Directorios comunes de salida
+            possible_output_dirs = ['output', 'Resultados', 'data', 'metrics']
+            
+            for out_name in possible_output_dirs:
+                out_path = os.path.join(base_dir, out_name)
+                if os.path.exists(out_path):
+                    try:
+                        # Opción 1: Borrar todo el directorio y recrearlo
+                        # shutil.rmtree(out_path)
+                        # os.makedirs(out_path, exist_ok=True)
+                        
+                        # Opción 2: Borrar solo archivos dentro (más seguro si hay permisos)
+                        for filename in os.listdir(out_path):
+                            file_path = os.path.join(out_path, filename)
+                            try:
+                                if os.path.isfile(file_path) or os.path.islink(file_path):
+                                    os.unlink(file_path)
+                                elif os.path.isdir(file_path):
+                                    shutil.rmtree(file_path)
+                                cleaned_count += 1
+                            except Exception as e:
+                                # print(f"   ⚠️ No se pudo borrar {file_path}: {e}")
+                                pass
+                    except Exception as e:
+                        print(f"   ⚠️ Error limpiando {out_name} para {name}: {e}")
+        
+        print(f"   ✓ Limpieza completada (archivos eliminados).")
+    
     def run_scraper(self, name, config, search_query, num_posts, num_comments, progress_queue=None):
         """
         Ejecuta un scraper individual en un proceso separado
@@ -119,6 +154,10 @@ class SocialMediaScraperManager:
                 '--comments', str(num_comments)
             ]
             
+            # Configurar entorno para UTF-8
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+
             # Ejecutar el scraper
             result = subprocess.run(
                 command,
@@ -126,7 +165,8 @@ class SocialMediaScraperManager:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
-                errors='replace'
+                errors='replace',
+                env=env
             )
             
             process_end = time.time()
@@ -204,30 +244,42 @@ class SocialMediaScraperManager:
         except Exception as e:
             print(f"Error parsing metrics: {e}")
             return None
-    def run_parallel(self):
+    def run_parallel(self, query=None, posts=None, comments=None):
         """Ejecuta todos los scrapers en paralelo usando multiprocessing"""
         self.print_header()
         
-        # RECOGER PARÁMETROS UNA SOLA VEZ
+        # RECOGER PARÁMETROS
         print("📝 CONFIGURACIÓN DE BÚSQUEDA")
         print("-" * 80)
         
-        search_query = input("Ingrese el tema de búsqueda (Tema): ").strip()
-        if not search_query:
-            search_query = "Inteligencia Artificial"
-            print(f"   Usando tema por defecto: {search_query}")
+        if query:
+            search_query = query
+            print(f"   Usando tema (CLI): {search_query}")
+        else:
+            search_query = input("Ingrese el tema de búsqueda (Tema): ").strip()
+            if not search_query:
+                search_query = "Inteligencia Artificial"
+                print(f"   Usando tema por defecto: {search_query}")
         
-        try:
-            num_posts = int(input("Número de posts a extraer por red social: ").strip())
-        except ValueError:
-            num_posts = 10
-            print(f"   Usando valor por defecto: {num_posts} posts")
+        if posts is not None:
+             num_posts = posts
+             print(f"   Usando posts (CLI): {num_posts}")
+        else:
+            try:
+                num_posts = int(input("Número de posts a extraer por red social: ").strip())
+            except ValueError:
+                num_posts = 10
+                print(f"   Usando valor por defecto: {num_posts} posts")
         
-        try:
-            num_comments = int(input("Número de comentarios por post: ").strip())
-        except ValueError:
-            num_comments = 5
-            print(f"   Usando valor por defecto: {num_comments} comentarios")
+        if comments is not None:
+            num_comments = comments
+            print(f"   Usando comentarios (CLI): {num_comments}")
+        else:
+            try:
+                num_comments = int(input("Número de comentarios por post: ").strip())
+            except ValueError:
+                num_comments = 5
+                print(f"   Usando valor por defecto: {num_comments} comentarios")
         
         print("\n" + "="*80)
         print(f"✅ Configuración establecida:")
@@ -237,6 +289,10 @@ class SocialMediaScraperManager:
         print("="*80 + "\n")
         
         self.start_time = time.time()
+        
+        # LIMPIEZA DE DATOS ANTERIORES
+        print("🧹 Limpiando datos de ejecuciones anteriores...")
+        self._clean_output_directories()
         
         print("🚀 Iniciando extracción paralela de datos...\n")
         
@@ -393,10 +449,15 @@ class SocialMediaScraperManager:
                 f.write(f"Tiempo de ejecución: {result['execution_time']:.2f}s\n")
                 
                 if result['status'] == 'success':
-                    f.write(f"\nSalida:\n{result.get('stdout', 'N/A')[:500]}\n")
+                    output = result.get('stdout', 'N/A')
+                    # Guardar ultimos 5000 lineas si es muy largo
+                    if len(output) > 10000:
+                        output = "...(inicio truncado)...\n" + output[-10000:]
+                    f.write(f"\nSalida:\n{output}\n")
                 elif result['status'] == 'error':
                     f.write(f"\nCódigo de error: {result.get('returncode', 'N/A')}\n")
-                    f.write(f"Error:\n{result.get('stderr', 'N/A')[:500]}\n")
+                    f.write(f"Error:\n{result.get('stderr', 'N/A')}\n")
+                    f.write(f"Salida (stdout):\n{result.get('stdout', 'N/A')}\n")
                 else:
                     f.write(f"\nExcepción:\n{result.get('error', 'N/A')}\n")
                 
@@ -743,6 +804,16 @@ class SocialMediaScraperManager:
 
 def main():
     """Función principal"""
+    import argparse
+    
+    # Parse CLI args
+    parser = argparse.ArgumentParser(description="Master Scraper Orchestrator")
+    parser.add_argument("--query", type=str, help="Tema de búsqueda")
+    parser.add_argument("--posts", type=int, help="Numero de posts")
+    parser.add_argument("--comments", type=int, help="Numero de comentarios")
+    parser.add_argument("--no-wait", action="store_true", help="No esperar Enter al final (modo API)")
+    args = parser.parse_args()
+
     print("\n🎯 Iniciando Master Scraper...")
     
     # Verificar que estamos en Windows (para soporte de colores)
@@ -754,24 +825,29 @@ def main():
     
     # Ejecutar scrapers en paralelo
     try:
-        results = manager.run_parallel()
+        results = manager.run_parallel(query=args.query, posts=args.posts, comments=args.comments)
         
         # Verificar si todos fueron exitosos
         all_success = all(r['status'] == 'success' for r in results)
         
         if all_success:
             print("🎉 ¡Todos los scrapers se ejecutaron exitosamente!")
-            return 0
+            code = 0
         else:
             print("⚠️  Algunos scrapers tuvieron errores. Revise el log para más detalles.")
-            return 1
+            code = 1
             
     except KeyboardInterrupt:
         print("\n\n⚠️  Ejecución interrumpida por el usuario.")
-        return 2
+        code = 2
     except Exception as e:
         print(f"\n\n❌ Error crítico: {str(e)}")
-        return 3
+        code = 3
+        
+    if args.no_wait:
+        return code
+        
+    return code
 
 
 if __name__ == "__main__":
@@ -781,6 +857,9 @@ if __name__ == "__main__":
     # Ejecutar programa principal
     exit_code = main()
     
-    # Esperar antes de cerrar
-    input("\n\nPresione ENTER para salir...")
+    # Hack simple: chequear sys.argv para ver si esperamos o no
+    if "--no-wait" not in sys.argv:
+        # Esperar antes de cerrar (Modo manual user)
+        input("\n\nPresione ENTER para salir...")
+    
     sys.exit(exit_code)

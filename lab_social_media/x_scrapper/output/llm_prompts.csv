@@ -1,40 +1,15 @@
 post_id,post_url,num_comments,llm_prompt
-2016216029999874296,https://x.com/NICOLAS71046251/status/2016216029999874296,10,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+633558108653101057,https://x.com/Fenerbahce/status/633558108653101057,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
-POR QUE LA JUSTICIA NO INVESTIGA A  SERGIO MASSA...?
-
-COMENTARIOS (10):
-1. Facil
-2. Los intereses que se encolumnan detrás del ex “mejor” Mtro. de Economía no pueden darse el lujo de entregarlo sin daño directo.
-3. Massa: CAPO MAFIA
-4. Porque los kukas tienen comprada a la justicia
-5. @JMilei
-6. Facil
-7. Los intereses que se encolumnan detrás del ex “mejor” Mtro. de Economía no pueden darse el lujo de entregarlo sin daño directo.
-8. Porque los kukas tienen comprada a la justicia
-9. Massa: CAPO MAFIA
-10. @JMilei
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2006456765013958906,https://x.com/AntonioLaje_/status/2006456765013958906,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
- Nicolás Daniel Rodríguez y Daniela Silva Muñoz son ñoquis del Senado y militantes de la agrupación ultra K ""La Capitana"".   Quedaron detenidos por reiteradas violaciones y abusos contra 4 víctimas.   La pareja integra una secta religiosa que practica ritos sexuales y,
+Yandex'le Messi, Ronaldo, İbrahimoviç bir hayal değil |  http:// fenerbahce.org/detay.asp?Cont entID=46309 …
 
 COMENTARIOS (5):
-1. Hay algún kuka que no sea pedófilo y merquero?
-2. Ya en el programa de Lanata hace muchos años 3 chicas denunciaron los abusos sexuales dentro de la organizacion de la Cámpora. Ningun colectivo feminista las defendió.
-3. Y no olvidarse de este colaborador de Mayra !!
-4. Ah, pero  @magariovero  y  @Kicillofok   solo quieren la reelección indefinida!. . Convirtieron la legislatura BONAERENSE en un antro. Chocolategate, penes de madera, gel anal, estafa con guardapolvos, etc! Hay que ser muy descerebrado para votar a esa LACRAS!.
-5. El kirchnerismo es una enfermedad mental!
+1. https:// x.com/maurowhark/sta tus/1784960889466114252/video/1 …
+2. bu baya komik bi olaydi ag
+3. Paramparçayım
+4. allahiiimmmmmm
+5. @Fenerbahce  hakaten imkansız değilmiş messi ronalda diye arattim valla onlar çıktı helal olsun  size
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -44,17 +19,27 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2011210060073222448,https://x.com/GordoAntiProgre/status/2011210060073222448,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018048127563944251,https://x.com/reddwall/status/2018048127563944251,0,"Analiza el sentimiento de este post (no hay comentarios):
+
+POST: Şunun güzelliğine bak amk bir maç bile olsa Messi'yi Galatasaray formasıyla görmek istiyoruz
+
+Responde en formato JSON:
+{
+    ""sentiment"": ""positive/negative/neutral/mixed"",
+    ""score"": 0.0-1.0,
+    ""reasoning"": ""breve explicación""
+}"
+2016518494729212146,https://x.com/epikmessianlari/status/2016518494729212146,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
-Detuvieron por captación y abuso de menores a Nicolás Rodríguez y Daniela Muñoz. Son militantes kukas de la agrupación La Capitana y empleados del Senado de Pba. El kirchnerismo es delincuencia. Abz!
+aşk..
 
 COMENTARIOS (5):
-1. No averigües que relación tiene Mayra con las prostitutas y menores que tienen tatuada una mariposa. Repito no lo hagas. Abz
-2. Los kumpas, no solo una asociacion ilicita económica, tambien un conjunto de perversos sexuales. Completitos.
-3. El peronismo es delincuencia. Siempre
-4. El kirchnerismo y todos sus derivados   son secta.
-5. El PERONISMO... Son Abusadores Sexuales   José Alperovich está con ""domiciliaria"" por salud y anda fumando en el balcón
+1. Messiye sevgimden yengeye bakmadım
+2. yenge de erik gibiymiş
+3. Of
+4. gote bak gote got degil et sote
+5. Şu göte ıslatmadan 9 posta atarım
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -64,67 +49,17 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2011644640345420283,https://x.com/GordoLeyes/status/2011644640345420283,10,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018086604095488154,https://x.com/forzacimbom/status/2018086604095488154,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
-Nicolás Rodríguez y Daniela Muñoz. Munipas de Kicillof. Imputados por captación y abuso de menores. Como digo siempre, KUKA = PEDÓFILO.
-
-COMENTARIOS (10):
-1. ya estaba dicho: Victoria Tolosa Paz: “En el peronismo siempre se garchó” y si no querés te garchan igual
-2. es facil KUKA = PEDOFILO
-3. Se confirmó el vínculo con la hermana de cierta presa?
-4. @SoyFeudaleM   mira la gente que defendes!!! Esto no te parece grave!!! Degenerada! Sucia como estás degenerados!! No tenés perdona
-5. Te das cuenta como le ponen ""empleados bonaerenses"", pero si una chica que ni forma parte del gobierno choca un poste le ponen ""LIBERTARIA""
-6. ya estaba dicho: Victoria Tolosa Paz: “En el peronismo siempre se garchó” y si no querés te garchan igual
-7. es facil KUKA = PEDOFILO
-8. Se confirmó el vínculo con la hermana de cierta presa?
-9. @SoyFeudaleM   mira la gente que defendes!!! Esto no te parece grave!!! Degenerada! Sucia como estás degenerados!! No tenés perdona
-10. Existe algún KuKa que no sea pedófilo, violador, asesino, chorro, narKo, golpeador de mujeres, acosador...?
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2016216029999874296,https://x.com/NICOLAS71046251/status/2016216029999874296,10,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-POR QUE LA JUSTICIA NO INVESTIGA A  SERGIO MASSA...?
-
-COMENTARIOS (10):
-1. Facil
-2. Los intereses que se encolumnan detrás del ex “mejor” Mtro. de Economía no pueden darse el lujo de entregarlo sin daño directo.
-3. Massa: CAPO MAFIA
-4. Porque los kukas tienen comprada a la justicia
-5. @JMilei
-6. Facil
-7. Los intereses que se encolumnan detrás del ex “mejor” Mtro. de Economía no pueden darse el lujo de entregarlo sin daño directo.
-8. Porque los kukas tienen comprada a la justicia
-9. Massa: CAPO MAFIA
-10. @JMilei
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2006456765013958906,https://x.com/AntonioLaje_/status/2006456765013958906,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
- Nicolás Daniel Rodríguez y Daniela Silva Muñoz son ñoquis del Senado y militantes de la agrupación ultra K ""La Capitana"".   Quedaron detenidos por reiteradas violaciones y abusos contra 4 víctimas.   La pareja integra una secta religiosa que practica ritos sexuales y,
+Arda Turan, ""Lionel Messi ve Galatasaray efsaneleri "" başlıklı paylaşımı paylaştı.
 
 COMENTARIOS (5):
-1. Hay algún kuka que no sea pedófilo y merquero?
-2. Ya en el programa de Lanata hace muchos años 3 chicas denunciaron los abusos sexuales dentro de la organizacion de la Cámpora. Ningun colectivo feminista las defendió.
-3. Y no olvidarse de este colaborador de Mayra !!
-4. Ah, pero  @magariovero  y  @Kicillofok   solo quieren la reelección indefinida!. . Convirtieron la legislatura BONAERENSE en un antro. Chocolategate, penes de madera, gel anal, estafa con guardapolvos, etc! Hay que ser muy descerebrado para votar a esa LACRAS!.
-5. El kirchnerismo es una enfermedad mental!
+1. Yeni mi bu yaaa
+2. Hatırlayan vardır oliviera da sofra bezi paylaştı arda
+3. 1 maç bile giysen yeter be o formayı
+4. Arda bı Messi fotosu sık taraftarın gazını al
+5. Bi bakmışsın 4 aya orada sadece Galatasaray efsaneleri yazıyormuş...
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -134,17 +69,17 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2011210060073222448,https://x.com/GordoAntiProgre/status/2011210060073222448,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018097807840649312,https://x.com/kiyashaber_09/status/2018097807840649312,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
-Detuvieron por captación y abuso de menores a Nicolás Rodríguez y Daniela Muñoz. Son militantes kukas de la agrupación La Capitana y empleados del Senado de Pba. El kirchnerismo es delincuencia. Abz!
+ Gerçekten olabilir mi?  Arda Turan, “Lionel Messi ve Galatasaray efsaneleri” başlıklı paylaşımı hikayesine ekledi.
 
 COMENTARIOS (5):
-1. No averigües que relación tiene Mayra con las prostitutas y menores que tienen tatuada una mariposa. Repito no lo hagas. Abz
-2. Los kumpas, no solo una asociacion ilicita económica, tambien un conjunto de perversos sexuales. Completitos.
-3. El peronismo es delincuencia. Siempre
-4. El kirchnerismo y todos sus derivados   son secta.
-5. El PERONISMO... Son Abusadores Sexuales   José Alperovich está con ""domiciliaria"" por salud y anda fumando en el balcón
+1. Gerçek olursa bütün ülke her maç GS yi izler
+2. Hulk gerçek mi
+3. Yahudi köpeği Messi'yi takıma isteyenler sorunludur. Fanatizmi bi kenara bırakın artık.
+4. Antalya’da yolcu otobüsünün devrilmesi sonucu hayatını kaybeden vatandaşlarımıza Allah’tan rahmet; kederli ailelerine başsağlığı ve sabır; yaralı vatandaşlarımıza acil şifalar dileriz.
+5. Noa Lang: ""Juventus karşısında hem Napoli ile hem de PSV ile kazanmıştım. Galatasaray ile de inşallah eleriz. Atmosfer bugün çok özeldi ama Juventus maçında daha da iyi olacağından eminim. Dört gözle bekliyorum.""
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -154,42 +89,27 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2011644640345420283,https://x.com/GordoLeyes/status/2011644640345420283,10,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018063941566411093,https://x.com/CoakunEmre/status/2018063941566411093,0,"Analiza el sentimiento de este post (no hay comentarios):
 
-POST ORIGINAL:
-Nicolás Rodríguez y Daniela Muñoz. Munipas de Kicillof. Imputados por captación y abuso de menores. Como digo siempre, KUKA = PEDÓFILO.
-
-COMENTARIOS (10):
-1. ya estaba dicho: Victoria Tolosa Paz: “En el peronismo siempre se garchó” y si no querés te garchan igual
-2. es facil KUKA = PEDOFILO
-3. Se confirmó el vínculo con la hermana de cierta presa?
-4. @SoyFeudaleM   mira la gente que defendes!!! Esto no te parece grave!!! Degenerada! Sucia como estás degenerados!! No tenés perdona
-5. Te das cuenta como le ponen ""empleados bonaerenses"", pero si una chica que ni forma parte del gobierno choca un poste le ponen ""LIBERTARIA""
-6. ya estaba dicho: Victoria Tolosa Paz: “En el peronismo siempre se garchó” y si no querés te garchan igual
-7. es facil KUKA = PEDOFILO
-8. Se confirmó el vínculo con la hermana de cierta presa?
-9. @SoyFeudaleM   mira la gente que defendes!!! Esto no te parece grave!!! Degenerada! Sucia como estás degenerados!! No tenés perdona
-10. Existe algún KuKa que no sea pedófilo, violador, asesino, chorro, narKo, golpeador de mujeres, acosador...?
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
+POST: Türkiye’nin en güzel 10 kadın oyuncusu kim?  .Hande Erçel 2.Melis Sezen sırt 3.Afra Saraçoğlu 4.Fahriye Evcen 5.Beren Saat 6.Fahriye Evcen 7.Tuba Büyüküstün 8.Elçin Sangu 9.Berrak Tüzünataç 10. Belçim Bilgin  #Pedofili Gülben Ergen #Epstein #RüyaGibi Messi Asprilla siyonist Aydan
 
 Responde en formato JSON:
 {
     ""sentiment"": ""positive/negative/neutral/mixed"",
     ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
+    ""reasoning"": ""breve explicación""
 }"
-2015889460118921421,https://x.com/nicomedinapa/status/2015889460118921421,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018055825336537475,https://x.com/kasimelsaddam/status/2018055825336537475,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
-En libertad, acompañado de su pareja salió del tribunal Claudio Luna Muñoz (39) cuidador de un predio y acusado de iniciar el primer foco de incendio que se propagó hasta Tomé. No se logró comprobar ni descartar su participación en el hecho  @adnradiochile
+De ki paran var Messi'yi getirdin. Şu kadrodan birini kestin Messi'yi koydun. Kesilen adam ben elimden geleni yaptım suçum neydi demez mi? Tamam duygusal bakmak istemiyorum ama bu çocuklar da hakkını veriyor. Yalan mı oğlum?
 
 COMENTARIOS (5):
-1. Quedó con arresto domiciliario nocturno. El dueño del predio, un abogado y notario, lo tenía trabajando sin contrato. Dijo que nunca se le avisó sobre las condiciones en que estaba la cocina  @adnradiochile
-2. Díganle a este hombre que un abogado quiere hablar con él para ayudarlo. ¿Alguien tendrá el contacto?
-3. Su causa la está tomando el defensor regional de Biobío, Osvaldo Pizarro
-4. No es el responsable
-5. Me da sospecha y me da pena por el hombre imagínate que te pase un accidente así por una estufa en mal estado y el jefe su responsabilidad??? Se corta el hilo por lo más delgado como siempre...Pero le quieren cargar toda la culpa???   Por lo que sé son varios focos incendiarios
+1. Yakışır be abi 
+2. Yakışır da kral kimi keselim 
+3. rotasyon yapacak kadro genişliğimiz yok kral. farklı oyun stilleri oynayacak isimler lazım ki her takımı daha sahaya çıkmadan ezelim. hadi bunları düşünmek bizi aşıyor allah göstermesin yarın birgün sakatlığı var kazası belası var.
+4. Var kral. Her mevkiye alt yapıdan topçularımız var. Mesela forvet veya kanat yazıyorlar, İlkan Sever var. Orda duruyor. Aslan gibi topçu. Alırsın girer hakkını verir. Her yere alternatifimiz var. Bu arkadaşlar neden yok yere heyecan yapıyor anlamıyorum.
+5. Bu kadrodan sefayi direk cikarabilirsin
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -199,99 +119,17 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2016506234283659457,https://x.com/HoyNarino/status/2016506234283659457,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: #Nariño| Gremios y autoridades de Nariño analizan impacto de la crisis comercial con Ecuador En la sede de la Cámara de Comercio de Pasto se desarrolló un encuentro ampliado del sector gremial de Nariño, con la participación del alcalde Nicolás Toro Muñoz y el gobernador Luis
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2016155158388900204,https://x.com/prdinhosouza/status/2016155158388900204,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Nicolas é gigante. Um jovem que teve coragem de levantar a voz quando o Brasil estava dormindo — o sono do cansaço, o sono do medo, o sono de quem foi silenciado.  Essa caminhada não é comum. Ela está acordando uma nação e reescrevendo um novo capítulo da nossa história.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2016594311819780504,https://x.com/RomanCues_i0sm/status/2016594311819780504,2,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018020071323349405,https://x.com/fatihdogan_38/status/2018020071323349405,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
- "" ...que los hombres que quieran tener hijos no dependan de una mujer ???????????  No se rían, es la teoría del gran salto evolutivo de Pedro Muñoz Lorite, el abogado que ha denunciado a  @oscar_puente_  por el accidente de Adamuz. Las mujeres están sobreprotegidas y
-
-COMENTARIOS (2):
-1. ¿Estamos bien de la cabeza?  En un primer momento, no pensaba colgar este video, pero creo que ofrece un perfil completo del personaje.   Dios les coja confesados: La puta Iglesia Católica, Fábrica de comunistas!!! Que aproveche.
-2.  "" ...que los hombres que quieran tener hijos no dependan de una mujer ???????????  No se rían, es la teoría del gran salto evolutivo de Pedro Muñoz Lorite, el abogado que ha denunciado a  @oscar_puente_  por el accidente de Adamuz. Las mujeres están sobreprotegidas y valoradas!! Dice el gacho.   https:// youtube.com/watch?v=9HV8YB PIIa0 …
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2007983954301989286,https://x.com/Danielmunozgo1/status/2007983954301989286,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Estados Unidos convirtió a Nicolás MADURO en un SÍMBOLO
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2011838258448076961,https://x.com/PonzistaAnti/status/2011838258448076961,3,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-Terrible el caso de estos dos psicopatas  Nicolás Rodríguez y Silvia Daniela Muñóz, eran empleados del Senado bonaerense y referentes de Movimiento Ciudadano “La Capitana”, una asociación kirchnerista que eran abusadores y violadores  Tenian una estructura piramidal y reclutaban
-
-COMENTARIOS (3):
-1. Todo ese chamanismo se reproduce en entornos de pobreza y miseria principalmente. Es tremendo.
-2. Lo que describe este párrafo (de otro artículo) lamentablemente es una práctica habitual   https:// 0221.com.ar/la-plata/detie nen-empleados-del-senado-y-dirigente-upcn-n121435 …
-3. Cómo vas a comparar a los pobres psicópatas con estos peronistas de pedown 
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2006326657020526791,https://x.com/nicolasrmunoz/status/2006326657020526791,2,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-Im very proud of representing my country  and sharing stage with people who have taught me so much 
-
-COMENTARIOS (2):
-1. Increíble Nicolás ! Que gran reconocimiento al esfuerzo y al trabajo duro ! Felicitaciones
-2. Gracias amigo! Abrazo grande 
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2011808112001401099,https://x.com/abrilcba_/status/2011808112001401099,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-Estos son Nicolás Rodríguez y Silvia Daniela Muñóz, dos kirxhneristas que abusaron de mujeres durantes años. Se hacían los feministas y eran tremendos delincuentes. Lacras.
+Beni tanımayan gençlerin kafası karışmasın diye daha önce birçok kez ifade ettiğim Messi ile GS formalı fotoğraf açıklamasını alta BIRAKIYORUM. Beşiktaş’ta hep doğruları söylemeye çalıştığım için, yönetimlerin yanlışlarını dile getirdiğim için yine sindirme ve susturmak için
 
 COMENTARIOS (5):
-1. Sabes la cantidad q abra como estos hdp...
-2. Inés Perado De Senlace.
-3. Serian líderes de una organización coercitiva, mas conocidas como Sektas.
-4. Se merecen cárcel en la mitad del desierto trabajando para comer, sin redes, sin celular ni beneficios. Inhabilitacion de por vida quitar las jubilaciones de privilegio. En Argentina tenemos q armar una cárcel como la de Bukele o Guantanamo. HDP
-5. Se merecen + de 25 años en T del Fuego y muchos castigos +
+1. Beni tanımayan gençlerin kafası karışmasın diye daha önce birçok kez ifade ettiğim Messi ile GS formalı fotoğraf açıklamasını alta BIRAKIYORUM. Beşiktaş’ta hep doğruları söylemeye çalıştığım için, yönetimlerin yanlışlarını dile getirdiğim için yine sindirme ve susturmak için organize karalama kampanyası başlattılar.  Sinmek bir tarafa, tam tersi bu taşeronluk yapan bu organize kötülük ve onu maddi manevi destekleyenler  hakettikleri ilgiyi görecekler!  Sakın; Beşiktaşlılığımı sorgulamaya cüret etmeyin! KDV’si bile size ağır gelir. NOKTA  Rize’den dönünce itinayla yalanlara ve algılara tek tek cevabım var. 
+2. Ne güzel yazmışım işte en büyük Beşiktaşlı sensin, Beşiktaş'ı en çok sen düşünürsün diye. Neden alındın ki? GS formasıyla fotoğraf çekindiğin de gerçek. Sıfır hata olan sıfır yalan olan bir tweet.
+3. Bu trollerin işleri güçleri algı abi . Başka da bir halta yaramıyorlar . Keşke enerjilerini biraz takımın sportif başarısı için harcasalar ...
+4. Keşke 20 tane amcanın eline kağıt verip bildiri okutmasaydınız be ya da ne bileyim hipodroma gidip atlara istifa diye bağırmasaydınız.
+5. Eleştirilerinize tamamen katılıyorum. Son dönemde bu eleştirileri çok az medya mensubu yapabiliyor. Onun için sizi taktir ediyorum. Ama Messi ve Gs formalı fotoğraf tüm Beşiktaşlıları rahatsız etmiştir.(tabi Gs’lileri de memnun etmiştir) Bu fotoğraf beni rahatsız etti…
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -301,27 +139,17 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2016102279418376196,https://x.com/alcaldiapasto/status/2016102279418376196,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Durante el Comité Ampliado Intergremial en Pasto, el alcalde Nicolás Toro Muñoz hizo un llamado al Gobierno Nacional ante el aumento del 30% en aranceles, que afecta la economía fronteriza, e instó a activar los canales diplomáticos con Ecuador. #NicolásToro #ColombiaYEcuador
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2013419979018747995,https://x.com/SantiagoRafa11/status/2013419979018747995,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2015490610283557155,https://x.com/arielipillo/status/2015490610283557155,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
- Luis Muñoz es un joven repostero de 27 años, que fue secuestrado el 9 de enero del 2024 después que funcionarios del DGCIM le hicieran el encargo de una torta para capturarlo.  Al llegar al lugar de entrega, encapuchados lo esperaban por “haber escrito algo en WhatsApp.”
+Búscame una imagen de Messi así en Liga Francesa y desactivo mi cuenta 
 
 COMENTARIOS (5):
-1. El testimonio de la hermana de Luis en #HablanLosFamiliares de  @orlandomorenove :
-2. Corrección: el secuestro sucedió el 9 de enero del 2025.
-3. Después no se vengan a quejar cuando los venezolanos, hartos de tanto abuso y maldad, los quieran linchar. Lo que le pasó a Maduro debería darles una lección de humildad.
-4. Y mucha gente sintiendo lastima por el dictador maduro
-5. Todos esos esbirros deben ir presos. Muchos se meten a policias porque les permiten amenazar, extorsionar, matraquear, engañar, secuestrar, apresar y delinquir. La limpieza que el próximo gobierno debe hacer en los centros militares y policiales, será larga!
+1. Esperemos que el Lyon gane la liga francesa y la copa digo Messi si la ganó
+2. La Gano gracias a Mbappe y al PSG el no aporto nada
+3. está en depresión Messi me dicen
+4. Búscame una foto así de Endrick y te vas a la verga
+5. Te sirve alguno de esos o te busco los demás donde tiene calificación 10? La concha enferma de tú madre
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 
@@ -331,471 +159,17 @@ Responde en formato JSON:
     ""score"": 0.0-1.0,
     ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
 }"
-2014669265463345440,https://x.com/NICOLAS71046251/status/2014669265463345440,4,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
+2018070346151137406,https://x.com/konsantrasyon33/status/2018070346151137406,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
 
 POST ORIGINAL:
-MAYRA MENDOZA...
-
-COMENTARIOS (4):
-1. Cobo robaste negra de mier, y te operaste la teta y el culo para satisfacer a los hombres que te encubren de tus delitos
-2. Farsantes hipócritas hijos de put4
-3. qué comentario pelotudo!!
-4. Esperando la respuesta de la señora intendente,no x el echo de querer la mejor educación para su hija,sino desmintiendo que tiene cuentas en el exterior,no xq no tiene derecho a ahorrar,sino xq ella critica a quien lo hace en el exterior,x capitalistas
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2013948826617257990,https://x.com/KalinaAnnGG/status/2013948826617257990,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-Kicillof abrazando a Daniela Muñoz, una de las cabezas de la secta K ""La Orden de la Luz"", una red criminal dedicada a vioIar mujeres para satisfacer sexuaImente a su novio, Nicolas Rodríguez. Ambos empleados del Senado bonaerense, donde se perpetraron muchos de estos abusos.
+Arkadaşlar Messi Galatasaray olayı doğru , transfer büyük oranda bitti büyük ihtimalle yarın açıklanır.
 
 COMENTARIOS (5):
-1. Siempre los kukas resultan ser terribles abusadores. Nunca falla, está en su ideología
-2. Kirchnerismo y cosas turbias siempre van de la mano
-3. Hay algún kuka que no sea violador?
-4. Milei se abraza con Scioli y muchos kukas más,son iguales.
-5. Didifoff adadando a Dadieda Dudos , uda de das dadedas de da dedda da.
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2012122336799989867,https://x.com/mavica7/status/2012122336799989867,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Secta en el Senado bonaerense: investigan si una funcionaria quiso evitar que las denuncias salieran a la luz Melina Gaudino fue mencionada por tres mujeres que denunciaron a Nicolás Rodríguez y Daniela Silva Muñóz
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2016561369479303449,https://x.com/andytasosa/status/2016561369479303449,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST:  Senado bonaerense: piden prisión preventiva para empleados denunciados por abuso sexual  Se trata de Nicolás Daniel Rodríguez y Daniela Silva Muñoz, quienes fueron denunciados por al menos cuatro víctimas.   En LN+
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2014710876540964921,https://x.com/NICOLAS71046251/status/2014710876540964921,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-SI USTED ES UN SENADOR ONORABLE Y HONESTO... YO TRABAJO DE PUTA Y SOY VIRGEN...
-
-COMENTARIOS (1):
-1. Recuerdo que con el lema  ""soy virgen"" se vendió e hizo famosa Wanda
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2013940019862409234,https://x.com/NICOLAS71046251/status/2013940019862409234,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: CASO NISMAN,NUEVAS  PERICIAS...
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2015626813553176716,https://x.com/MundoMunoz1997/status/2015626813553176716,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-NICOLAS JURA QUE DEJAMOS A TEBI POR ORDEN SUYA  #LaCasaDeLosFamososCol3
-
-COMENTARIOS (1):
-1. #LaCasaDeLosFamososCol3 Mientras tanto Beba en el confesionario
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2014169001249677329,https://x.com/YfranEly/status/2014169001249677329,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-SIEMPRE LOS K Nicolás Rodríguez y Daniela Silva Muñoz, dos referentes de la militancia kirchnerista y feminista en La Plata, permanecen detenidos. Los acusan de captar jóvenes al menos desde 2015. Ya son cuatro las mujeres que fueron reconocidas como damnificadas.
-
-COMENTARIOS (5):
-1. Cuánta IMPUNIDAD. Todos son Delincuentes,que Vergüenza tienen que quedar PRESOS!!!!
-2. Grave!
-3. Inútiles como siempre y degenerados .
-4. Pero  que hdp
-5. Ché y no hablas del psiquiátrico que se garcha a su perro embalsamado?
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2010363459087868317,https://x.com/nicolasrmunoz/status/2010363459087868317,2,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-Di una charla en inglés hablando de las cosas buenas que tiene mi país  hace 5 años terminé el curso online de SER EXTRAORDINARIO con  @Vishen  en donde decreté que sería un speaker internacional  y hoy esa meta la cumplí junto al propio Vishen que también era speaker del
-
-COMENTARIOS (2):
-1. Felicidades! Un gran evento donde Ecuador estuvo representado por ti .   La próxima llévame, te cargo las maletas. Jaja
-2. Gracias Carlita 
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2011860216489611313,https://x.com/NICOLAS71046251/status/2011860216489611313,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-NATALIA SARACHO  NIEGA ROMANCE CON MAURICIO MACRI...
-
-COMENTARIOS (1):
-1. Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua Juajuajua
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2015048360701333802,https://x.com/NICOLAS71046251/status/2015048360701333802,3,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-NICOLAS MUÑOZ
-
-COMENTARIOS (3):
-1. Algunos tienen actitudes de hsdmp ,como el papadas
-2. Exacto!!! Muy buen Sábado para vos!!!
-3. La felicidad es la mujer casada ..Dijo Roque Narvaja
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2012482473653871084,https://x.com/NICOLAS71046251/status/2012482473653871084,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: PREOCUPATE MAS POR TU CONCIENCIA.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2015763070438560035,https://x.com/NICOLAS71046251/status/2015763070438560035,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: JAVIER MILEI...
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2014687372483478007,https://x.com/NICOLAS71046251/status/2014687372483478007,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-JAVIER MILEI Y LA  FILOSOFIA GRIEGA...
-
-COMENTARIOS (1):
-1. Presidente
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2011771940827025527,https://x.com/todonoticias/status/2011771940827025527,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-MILITABAN EN UN MOVIMIENTO QUE SE PROCLAMABA FEMINISTA, SE PRESENTABAN COMO REFERENTES DE GÉNERO Y ABUSARON SEXUALMENTE DE AL MENOS TRES MUJERES DURANTE AÑOS.   Nicolás Rodríguez y Silvia Daniela Muñóz son empleados del Senado bonaerense. Militan en un espacio político
-
-COMENTARIOS (5):
-1. Que sorpresa que sean kirchneristas!!!!
-2. ¿Kirchos que se dicen feministas y abusan de mujeres? ¡NO LO PUEDO CREER, ES LA PRIMERA VEZ QUE PASA!...  ... es lo que diría si fuera un imbécil.
-3. NO falla
-4. Cuando son kirchneristas no es cadena nacional.
-5. Recuerden, violar gente está mal, kukas, eso es mucho muy importante.
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2015911221979955560,https://x.com/nicolasrmunoz/status/2015911221979955560,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Descubre las #finanzaspersonales y el manejo de #dinero desde una óptica más humana #morirconcero
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-1986835340477251963,https://x.com/juansuraci/status/1986835340477251963,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: #GimnasiaMza - Informa  @TibuFernandez07   la lista de jugadores que seguirán ligados al club: César Rigamonti, Facundo Nadalin, Diego Mondino, Imanol González, Franco Saavedra, Matías Recalde, Lautaro Carrera, Fermín Antonini, Matías Muñoz, Nicolás Romano, Luciano Cingolani,
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2015389368324702391,https://x.com/NICOLAS71046251/status/2015389368324702391,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: EL SER FANATICO K,DESTRUYE EL CEREBRO...
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2014029474363220079,https://x.com/elcancillercom/status/2014029474363220079,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: [JUSTICIA] Imputaron por otros cinco hechos de abuso sexual a los dos empleados del Senado bonaerense acusados de liderar una secta: Nicolás Rodríguez y Daniela Silva Muñoz ya se encuentran detenidos por otros hechos de violencia sexual contra tres mujeres.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2014686133532131639,https://x.com/NICOLAS71046251/status/2014686133532131639,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-SRGIO MASSA DE IR PRESO ,JUNTO A  ALBERTO FERNANDEZ  Y CRISTINA...NO PUEDEN ESTAR SUELTOS CON LO QUE ROBARON Y  MALGASTARON EN  SUCIA POLITICA...
-
-COMENTARIOS (5):
-1. Tal cual cuando la justicia lo va a investigar protegido
-2. Qué se haga realidad de una vez por todas!!.-
-3. SABEN QUE MASSITA SE ROBO LAS REJAS !!!
-4. Son una organización delictiva y terrorista
-5. Team . Los blindados!
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2015762558704091316,https://x.com/NICOLAS71046251/status/2015762558704091316,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-NO LO ENTENDERIAS ...?
-
-COMENTARIOS (5):
-1. estan presos???
-2. Súmale que estuvo o está , Tinelli y todos sus parientes y la vieja mapache  @SoyFeudaleM  .. 
-3. Y ahora los paladines de verdad y la justicia que dirán ?
-4. Nunca comprendí, que hacía Fantino ahí, ¡lástima!
-5. Con estos dos, creo cualquiera
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2014027229873746093,https://x.com/Resumidoinfo/status/2014027229873746093,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST:  Nuevas imputaciones para los empleados del Senado bonaerense acusados de liderar una secta  Nicolás Rodríguez y Daniela Silva Muñoz enfrentan cargos por abusos sexuales reiterados y manipulación psicológica. Mañana peritarán sus celulares 
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-1845890880294867054,https://x.com/FredGaulois/status/1845890880294867054,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-Dans la catégorie, on marche sur la tête, attention, accrochez vous bien à votre siège  Nicolas a 26 ans, en 2013, lycéen, il est accusé pour la 1ère fois d'agressions sexuelles et condamné à 4 mois de prison avec sursis. Etudiant en médecine, il récidive, entre 2017 et 2020, 3
-
-COMENTARIOS (5):
-1. je suis dégoûté  je suis infirmière suspendue qui n'a pas pu reprendre le travail car inquiété par l'ordre et ce mec est un violeur et il a le droit de bosser c'est honteux 
-2. Jamais inquiété par le conseil de l'Ordre: le chirurgien Joël Le Scouarnec frise les 300 victimes...
-3. 26 ans > encore lycéen  et déjà violeur et finit comme gynécologue   et pour bientôt Ministre de la Santé au gouvernement de Macron 
-4. C'est de pire en pire ce pays.  Faut supprimer le ministère de la justice vu qu'il n'y en a plus
-5. Nicolas a une future carrière de violeur en série qui l’attend sous l’avale de  @ordre_medecins  spécialistes des violeurs et des pédocriminels ! Ils ont protégé Joël Le Scouarnec, le plus grand pédocriminel de France, ils protègeront Nicolas !
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2010187408126648330,https://x.com/elsalvador/status/2010187408126648330,1,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-#DeDeportes «El futbolista salvadoreño debe tener más deseo de superación», Nicolas Muñoz  El ex jugador panameño, ahora comentarista de TV, dio su opinión sobre la actualidad del fútbol en El Salvador y el cambio en la Fesfut.
-
-COMENTARIOS (1):
-1. panama vet calls out weak salvador grind
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2007416651143324101,https://x.com/EcuavisaInforma/status/2007416651143324101,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
- El alcalde de #Quito, Pabel Muñoz, es la primera autoridad de #Ecuador que se pronuncia por la incursión armada de Estados Unidos en Venezuela que ha culminado con la captura de Nicolás Maduro, según informó Donald Trump.   https:// bit.ly/493hR2S
-
-COMENTARIOS (5):
-1. Perro naRCo5 todavía te queda Cuba, Nicaragua y México para que se puedan fugar
-2. Anda, y reclama tú, pues glosado sectario; toda latinoamérica está agradecida de qué se capturó al jefe del cartel de los soles
-3. Todos los compadres y defensores de las dictaduras mas descaradas de la historia en Latinoamérica, salen a defender lo indefendible. Todos los pueblos americanos quieren vivir en democracia, todos menos quienes hacen de la política su negocio de vida. Se les acaba la teta!
-4. El NO ALCALDE,  NO ES LA PRIMERA AUTORIDAD DE ECUADOR, es la última rueda del coche, no tiene dignidad. Un glosado, entró con fraude,  con qué cara opina ?  El mismo, debe abandonar un cargo que no le pertenece.
-5. Tic toc amigos de maduro
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2007413493733917016,https://x.com/teleamazonasec/status/2007413493733917016,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-'Latinoamérica debe rechazar cualquier ataque', alcalde de Quito, Pabel Muñoz se pronuncia tras ataque de EE.UU. contra el gobierno de Nicolás Maduro  https:// f.mtr.cool/dwbansoyjw
-
-COMENTARIOS (5):
-1. Nadie que no sea venezolano puede opinar sobre este asunto, solo ellos han vivido el hambre, la persecución, el secuestro de su país. Solo ellos están legitimados para sentirse libres o vulnerados.  Los demás solo podemos pedir que Dios bendiga a Venezuela
-2. Pabel no nos representa a los quiteños.
-3. Repito, NO NOS IMPORTA SU OPINION. Pongan opiniones de gente decente por favor.
-4. 2026 empieza muy bien
-5. ? El chiste se cuenta solo
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-1990453687030853995,https://x.com/BNPeriodismo/status/1990453687030853995,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Conversamos con Gonzalo Muñoz, abogado y analista político, sobre algunas hipótesis de la contundente derrota de Daniel Noboa en la Consulta. ""Unos voceros de pacotilla. Jamás pudieron trasladar  la importancia de un referendum y una consulta popular a la ciudadania"", dijo Muñoz
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2015404420121473379,https://x.com/ELRINCONDELGAT8/status/2015404420121473379,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: Nicolas es un personaje muy interesante y con muchas cosas a su favor , pero creo esos 52% en la primera semana le ha hecho perder el piso y hecho muy soberbio #LaCasaDeLosFamosososCol3
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2013939762730508708,https://x.com/NICOLAS71046251/status/2013939762730508708,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-BRAVA,LA HERMANA DE CRISTINA...
-
-COMENTARIOS (5):
-1. Y es Flia. 
-2. Son k no les falta nada .
-3. Muy Monto
-4. También la cagó a la Kris?
-5. Que ascooooo por favor,  ficha limpia ya
-
-Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación de por qué los comentarios reflejan este sentimiento""
-}"
-2013935599531548839,https://x.com/NICOLAS71046251/status/2013935599531548839,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: QUE ALGUIEN DESPIERTE A LA JUSTICIA,POR FAVOR...
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2012481231544279040,https://x.com/NICOLAS71046251/status/2012481231544279040,0,"Analiza el sentimiento de este post (no hay comentarios):
-
-POST: TREMENDO RECIBIMIENTO....
-
-Responde en formato JSON:
-{
-    ""sentiment"": ""positive/negative/neutral/mixed"",
-    ""score"": 0.0-1.0,
-    ""reasoning"": ""breve explicación""
-}"
-2015404022832796148,https://x.com/NICOLAS71046251/status/2015404022832796148,5,"Analiza el sentimiento general de la audiencia sobre este post basándote en los comentarios:
-
-POST ORIGINAL:
-CLUBES POBRES Y AFA RICA...NO SIRVE.
-
-COMENTARIOS (5):
-1. Cómo los sindicalistas y como todos los peronistas que gobernaron el país todos igualitos .
-2. Y los clubes todos en silencio
-3. Tránsfugas
-4. Hdp's no paran. La angurria de esta gente no se compara con nada. No conocen la vergüenza, la decencia no nada bueno, virtuoso o creativo, jamás
-5. Parece la oficina de un sindicalista.
+1. Ne alaka ne yapcaz messiyi
+2. @grok  doru mu
+3. Yapın yapın, servis yapın. Küllüm zarar veriyorsunuz takıma. Aynen kardeşim Messi Galatasarayda…. Noa Lang stoper, Asprilla 6-8 oynar artık
+4. @grok  doğru mu bu
+5. yok artık lebron james  biri bize şaka mı yapıyor arda da paylaşım yapmış instadan
 
 Basándote ÚNICAMENTE en los comentarios, determina qué opina la gente sobre el post.
 

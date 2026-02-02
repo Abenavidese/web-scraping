@@ -102,168 +102,116 @@ def create_optimized_batch_prompt(df_sentiment):
     return prompt
 
 
-def analyze_batch_openai(client, df_sentiment, model="gpt-4o-mini"):
-    """
-    Analiza todos los posts en batch usando OpenAI.
-    Optimizado para mínimo uso de tokens.
-    
-    Args:
-        client: Cliente de OpenAI
-        df_sentiment: DataFrame con posts
-        model: Modelo a usar (gpt-4o-mini es el más barato)
-    
-    Returns:
-        DataFrame actualizado
-    """
-    if client is None:
-        return df_sentiment
-    
-    print(f"\n🔍 Analyzing {len(df_sentiment)} posts with OpenAI ({model})...")
-    print("   💰 Using token-optimized prompts for cost efficiency")
-    
-    # Crear prompt optimizado
-    batch_prompt = create_optimized_batch_prompt(df_sentiment)
-    
-    # Calcular tokens aproximados (1 token ≈ 4 caracteres)
-    estimated_tokens = len(batch_prompt) // 4
-    print(f"   📊 Estimated input tokens: ~{estimated_tokens}")
-    
-    # Calcular max_tokens dinámicamente según número de posts
-    # Cada análisis necesita ~80 tokens (id, sentiment, score, reasoning)
-    # Agregamos 30% de buffer + overhead del JSON
-    num_posts = len(df_sentiment)
-    max_tokens_output = max(500, int(num_posts * 80 * 1.3 + 200))
-    print(f"   📤 Max output tokens: {max_tokens_output} (calculated for {num_posts} posts)")
-    
-    retry_count = 3
-    for attempt in range(retry_count):
-        try:
-            print(f"\n📤 Sending request (attempt {attempt + 1}/{retry_count})...")
-            
-            # Llamar a OpenAI con configuración optimizada
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "Eres un analizador de sentimientos. Responde solo JSON compacto."
-                    },
-                    {
-                        "role": "user", 
-                        "content": batch_prompt
-                    }
-                ],
-                temperature=0.3,  # Baja temperatura para respuestas consistentes
-                max_tokens=max_tokens_output,   # Calculado dinámicamente según posts
-                response_format={"type": "json_object"}  # Forzar JSON
-            )
-            
-            # Extraer respuesta
-            response_text = response.choices[0].message.content.strip()
-            
-            # Mostrar uso de tokens
-            usage = response.usage
-            print(f"   💰 Tokens used: {usage.total_tokens} (input: {usage.prompt_tokens}, output: {usage.completion_tokens})")
-            
-            # Calcular costo aproximado (GPT-4o-mini: $0.150/1M input, $0.600/1M output)
-            cost_input = (usage.prompt_tokens / 1_000_000) * 0.150
-            cost_output = (usage.completion_tokens / 1_000_000) * 0.600
-            total_cost = cost_input + cost_output
-            print(f"   💵 Estimated cost: ${total_cost:.6f}")
-            
-            # Parsear JSON
-            # OpenAI puede devolver {"results": [...]} o directamente [...]
-            data = json.loads(response_text)
-            
-            # Extraer array de resultados
-            if isinstance(data, dict):
-                # Buscar el array en el dict
-                results = data.get('results') or data.get('sentiments') or list(data.values())[0]
-            else:
-                results = data
-            
-            if not isinstance(results, list):
-                print(f"⚠️ Response is not a list (attempt {attempt + 1}/{retry_count})")
-                continue
-            
-            # Actualizar DataFrame
-            print("\n✅ Analysis successful! Updating results...")
-            for idx, row in df_sentiment.iterrows():
-                post_id = str(row['post_id'])
-                result = None
-                
-                # Buscar por ID o índice
-                for r in results:
-                    if str(r.get('id')) == post_id or str(r.get('post_id')) == post_id:
-                        result = r
-                        break
-                
-                if result is None and idx < len(results):
-                    result = results[idx]
-                
-                if result:
-                    # Mapear campos (pueden tener nombres cortos)
-                    sentiment = result.get('s') or result.get('sentiment') or 'unknown'
-                    score = result.get('sc') or result.get('score') or 0.5
-                    reasoning = result.get('r') or result.get('reasoning') or 'No reasoning provided'
-                    
-                    df_sentiment.at[idx, 'sentiment'] = sentiment
-                    df_sentiment.at[idx, 'sentiment_score'] = score
-                    df_sentiment.at[idx, 'sentiment_reasoning'] = reasoning
-                    
-                    print(f"   [{idx + 1}] ✅ {sentiment} (score: {score})")
-                else:
-                    print(f"   [{idx + 1}] ⚠️ No result, using defaults")
-                    df_sentiment.at[idx, 'sentiment'] = 'unknown'
-                    df_sentiment.at[idx, 'sentiment_score'] = 0.5
-                    df_sentiment.at[idx, 'sentiment_reasoning'] = 'No result'
-            
-            print("\n✅ Sentiment analysis completed!")
-            return df_sentiment
-            
-        except json.JSONDecodeError as e:
-            print(f"⚠️ JSON parse error (attempt {attempt + 1}/{retry_count}): {e}")
-            print(f"Response: {response_text[:300]}...")
-            
-        except Exception as e:
-            print(f"⚠️ Error (attempt {attempt + 1}/{retry_count}): {e}")
-        
-        if attempt < retry_count - 1:
-            print("   Waiting 3 seconds before retry...")
-            time.sleep(3)
-    
-    # Si falla todo
-    print("\n❌ All attempts failed, using defaults")
-    for idx in df_sentiment.index:
-        df_sentiment.at[idx, 'sentiment'] = 'unknown'
-        df_sentiment.at[idx, 'sentiment_score'] = 0.5
-        df_sentiment.at[idx, 'sentiment_reasoning'] = 'Analysis failed'
-    
-    return df_sentiment
 
+# Importar DeepSeek Client desde utils_common
+import sys
+# Asegurar que podemos importar utils_common subiendo un nivel
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+try:
+    from utils_common.deepseek_client import deepseek
+    DEEPSEEK_AVAILABLE = True
+except ImportError as e:
+    DEEPSEEK_AVAILABLE = False
+    print(f"WARNING: Could not import DeepSeek client: {e}")
+
+def analyze_batch_deepseek(df_sentiment):
+    """
+    Analiza tweets y respuestas con DeepSeek en BATCH (Granular).
+    """
+    if not DEEPSEEK_AVAILABLE or not deepseek.client:
+        print("⚠️ DeepSeek client not available. Skipping analysis.")
+        return pd.DataFrame()
+    
+    print(f"\n🔍 Preparing granular analysis for {len(df_sentiment)} tweets...")
+    
+    all_items = []
+    
+    for idx, row in df_sentiment.iterrows():
+        # Usar username o ID para identificar
+        post_id = f"tweet_{idx}" 
+        user = row.get('username', 'Unknown')
+        
+        # 1. Agregar el TWEET
+        text = str(row['post_text']).strip()
+        if text:
+            all_items.append({
+                "internal_id": f"{post_id}_TWEET",
+                "post_id": post_id,
+                "user": user,
+                "type": "TWEET",
+                "text": text
+            })
+            
+        # 2. Agregar RESPUESTAS (comments)
+        try:
+            comments_list = json.loads(row['comments_json'])
+            for i, comment in enumerate(comments_list):
+                if comment.strip():
+                    all_items.append({
+                        "internal_id": f"{post_id}_REPLY_{i}",
+                        "post_id": post_id,
+                        "user": "ReplyUser",
+                        "type": "REPLY",
+                        "text": comment
+                    })
+        except:
+            pass
+            
+    print(f"   📊 Total items to analyze: {len(all_items)} (Tweets + Replies)")
+    
+    if not all_items:
+        return pd.DataFrame()
+    
+    # Batch request
+    items_payload = [{"id": item['internal_id'], "text": item['text']} for item in all_items]
+    
+    print(f"   📤 Sending batch to DeepSeek API...")
+    batch_results = deepseek.analyze_sentiment_batch(items_payload, context="Twitter/X")
+    print(f"   📥 Received {len(batch_results)} results.")
+    
+    # Construir DataFrame granular
+    granular_data = []
+    for item in all_items:
+        res = batch_results.get(item['internal_id'], {
+            "sentiment": "NEUTRAL", 
+            "score": 0.5, 
+            "reasoning": "Analysis failed"
+        })
+        granular_data.append({
+            "parent_id": item['post_id'],
+            "user": item['user'],
+            "item_type": item['type'],
+            "text_content": item['text'],
+            "sentiment": res['sentiment'],
+            "sentiment_score": res['score'],
+            "sentiment_reasoning": res['reasoning']
+        })
+
+    print(f"\n✅ DeepSeek granular analysis completed!")
+    return pd.DataFrame(granular_data)
 
 def main_sentiment_analysis(input_csv='output/sentiment_input.csv', 
                            output_csv='output/sentiment_results.csv',
                            api_key=None):
     """
-    Análisis de sentimientos con OpenAI.
+    Análisis de sentimientos con DeepSeek.
     """
-    print("=== Sentiment Analysis with OpenAI ===\n")
+    print("=== Sentiment Analysis with DeepSeek ===\n")
     
+    if not os.path.exists(input_csv):
+        print(f"❌ Input file not found: {input_csv}")
+        return None
+
     # Cargar datos
     print(f"Loading data from {input_csv}...")
     df_sentiment = pd.read_csv(input_csv)
     print(f"Loaded {len(df_sentiment)} posts\n")
     
-    # Configurar OpenAI
-    client = setup_openai(api_key)
-    
-    if client is None:
-        print("Cannot proceed without OpenAI configuration")
-        return df_sentiment
-    
-    # Analizar en batch
-    df_results = analyze_batch_openai(client, df_sentiment)
+    # Analizar usando DeepSeek
+    df_results = analyze_batch_deepseek(df_sentiment)
     
     # Guardar
     df_results.to_csv(output_csv, index=False, encoding='utf-8')
@@ -275,11 +223,11 @@ def main_sentiment_analysis(input_csv='output/sentiment_input.csv',
     for sentiment, count in sentiment_counts.items():
         print(f"   {sentiment}: {count}")
     
-    avg_score = df_results['sentiment_score'].astype(float).mean()
-    print(f"\n📈 Average sentiment score: {avg_score:.2f}")
+    if 'sentiment_score' in df_results.columns:
+        avg_score = df_results['sentiment_score'].astype(float).mean()
+        print(f"\n📈 Average sentiment score: {avg_score:.2f}")
     
     return df_results
-
 
 if __name__ == "__main__":
     main_sentiment_analysis()

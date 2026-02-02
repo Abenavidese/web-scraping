@@ -1,160 +1,105 @@
+
+# Importar DeepSeek Client desde utils_common
+import sys
 import os
-import time
-from openai import OpenAI
-import config
+# Asegurar que podemos importar utils_common subiendo un nivel
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(current_dir)) # Subir 2 niveles: linkedin_scraper -> lab_social_media -> root
+sys.path.append(parent_dir)
+
+try:
+    from utils_common.deepseek_client import deepseek
+    DEEPSEEK_AVAILABLE = True
+except ImportError as e:
+    DEEPSEEK_AVAILABLE = False
+    print(f"WARNING: Could not import DeepSeek client: {e}")
+
 
 class LLMAnalyzer:
     def __init__(self):
-        # Initialize Clients
+        self.client = deepseek
         
-        # Grok (xAI)
-        self.grok_client = None
-        if config.GROK_API_KEY:
-            self.grok_client = OpenAI(
-                api_key=config.GROK_API_KEY,
-                base_url="https://api.x.ai/v1",
-            )
-        
-        # OpenAI
-        self.openai_client = None
-        if config.OPENAI_API_KEY:
-            self.openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
+    def analyze(self, text, network, llm_provider='deepseek'):
+        """
+        Analiza usando DeepSeek (el provider ya es irrelevante, forzamos DeepSeek).
+        Retorna (Sentimiento, Explicación) strings para compatibilidad con llamadas legacy (si las hay).
+        """
+        if not text:
+            return "NEUTRAL", "Texto vacío"
             
-        # DeepSeek
-        self.deepseek_client = None
-        if config.DEEPSEEK_API_KEY:
-            self.deepseek_client = OpenAI(
-                api_key=config.DEEPSEEK_API_KEY, 
-                base_url="https://api.deepseek.com/v1"
-            )
+        if not self.client.client:
+             return "NEUTRAL", "DeepSeek API Key no configurada"
+
+        result = self.client.analyze_sentiment(text, context=network)
+        return result['sentiment'], result['reasoning']
+
+    def analyze_batch_granular(self, posts_data):
+        """
+        Analiza items granulares (Post y Comentarios) en Batch.
+        posts_data: Lista de dicts de posts scrapeados.
+        Retorna: Lista de resultados granulares.
+        """
+        if not self.client.client:
+            print("⚠️ DeepSeek client not available.")
+            return []
             
-        # Gemini
-        if config.GEMINI_API_KEY:
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=config.GEMINI_API_KEY)
-                self.gemini_model = genai.GenerativeModel('gemini-pro')
-            except ImportError:
-                self.gemini_model = None
-        else:
-            self.gemini_model = None
-
-    def _get_prompt(self, text, network):
-        return f"""
-        Analiza el siguiente texto extraído de {network}.
+        print(f"   Preparando análisis granular para {len(posts_data)} posts de LinkedIn...")
         
-        Texto: "{text}"
+        all_items = []
+        for idx, post in enumerate(posts_data):
+            # 1. Post Body
+            content = post.get('content', '').strip()
+            if content:
+                all_items.append({
+                    "internal_id": f"li_post_{idx}",
+                    "parent_id": f"post_{idx}",
+                    "type": "POST",
+                    "text": content,
+                    # Preservar metadatos para el CSV final si queremos
+                    "author": post.get('author', 'Unknown')
+                })
+            
+            # 2. Comentarios
+            comments = post.get('comments', [])
+            # A veces comentarios es int, asegurar que sea lista
+            if isinstance(comments, list):
+                for c_idx, comment in enumerate(comments):
+                    c_text = comment.get('text', '').strip() if isinstance(comment, dict) else str(comment).strip()
+                    if c_text:
+                        all_items.append({
+                            "internal_id": f"li_comment_{idx}_{c_idx}",
+                            "parent_id": f"post_{idx}",
+                            "type": "COMMENT",
+                            "text": c_text,
+                            "author": comment.get('author', 'Unknown') if isinstance(comment, dict) else "Unknown"
+                        })
+                        
+        if not all_items:
+            return []
+            
+        # Batch Process
+        print(f"   📤 Enviando {len(all_items)} items a DeepSeek (Batch)...")
+        payload = [{"id": x["internal_id"], "text": x["text"]} for x in all_items]
         
-        Tareas:
-        1. Clasifica el sentimiento (Positivo, Negativo, Neutro).
-        2. Explica brevemente POR QUÉ clasificaste así el sentimiento.
+        batch_results = self.client.analyze_sentiment_batch(payload, context="LinkedIn")
+        print(f"   📥 Recibidos {len(batch_results)} resultados.")
         
-        Formato de respuesta esperado (fijo):
-        Sentimiento: [CLASIFICACIÓN]
-        Explicación: [BREVE EXPLICACIÓN]
-        """
-
-    def analyze(self, text, network, llm_provider):
-        """
-        Enruta el análisis al LLM correspondiente.
-        """
-        if not text or len(text) < 5:
-            return "Neutro", "Texto insuficiente para analizar."
-
-        prompt = self._get_prompt(text, network)
-        
-        try:
-            if llm_provider == 'grok':
-                return self._analyze_with_grok(prompt)
-            elif llm_provider == 'openai':
-                return self._analyze_with_openai(prompt)
-            elif llm_provider == 'gemini':
-                return self._analyze_with_gemini(prompt)
-            elif llm_provider == 'deepseek':
-                return self._analyze_with_deepseek(prompt)
-            else:
-                return "Error", "Proveedor de LLM desconocido"
-        except Exception as e:
-            return "Error", f"Fallo en análisis con {llm_provider}: {str(e)}"
-
-    def _analyze_with_grok(self, prompt):
-        if not self.grok_client:
-            return "N/A", "API Key de Grok no configurada."
-        
-        # Lista de modelos a probar (según reporte de usuario y docs recientes)
-        models_to_try = ["grok-2-latest", "grok-beta", "grok-2", "grok-1"]
-        
-        # El usuario mencionó "grok 4", así que lo añadimos al principio por si acaso es un alias nuevo
-        models_to_try.insert(0, "grok-4")
-
-        last_error = None
-        
-        for model in models_to_try:
-            try:
-                # print(f"   [Debug] Intentando con modelo: {model}...") 
-                completion = self.grok_client.chat.completions.create(
-                    model=model, 
-                    messages=[
-                        {"role": "system", "content": "Eres un experto en análisis de sentimiento. Responde con: 'Sentimiento: [Positivo/Negativo/Neutro] \\n Explicación: [Breve razón]'."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                return self._parse_response(completion.choices[0].message.content)
-            except Exception as e:
-                last_error = e
-                # print(f"   [Debug] Falló {model}: {e}")
-                continue
-        
-        return "Error", f"Todos los modelos Grok fallaron. Último error: {str(last_error)}"
-
-    def _analyze_with_openai(self, prompt):
-        if not self.openai_client:
-            # Simulación si no hay Key (para cumplir la práctica si el usuario solo tiene Grok)
-            return "Simulado (OpenAI)", "No se proporcionó API Key. Se asume Neutro."
-        
-        completion = self.openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return self._parse_response(completion.choices[0].message.content)
-
-    def _analyze_with_deepseek(self, prompt):
-        if not self.deepseek_client:
-             return "Simulado (DeepSeek)", "No se proporcionó API Key. Se asume Neutro."
-        
-        completion = self.deepseek_client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return self._parse_response(completion.choices[0].message.content)
-
-    def _analyze_with_gemini(self, prompt):
-        if not self.gemini_model:
-             return "Simulado (Gemini)", "No se proporcionó API Key. Se asume Neutro."
-        
-        response = self.gemini_model.generate_content(prompt)
-        return self._parse_response(response.text)
-
-    def _parse_response(self, response_text):
-        """
-        Parsea la respuesta para separar sentimiento y explicación.
-        Busca 'Sentimiento:' y 'Explicación:'.
-        """
-        sentiment = "Indeterminado"
-        explanation = response_text
-        
-        lines = response_text.split('\n')
-        for line in lines:
-            if "Sentimiento:" in line:
-                sentiment = line.split("Sentimiento:")[1].strip()
-            elif "Explicación:" in line:
-                explanation = line.split("Explicación:")[1].strip()
-        
-        # Si no se encontró el formato exacto, devolvemos todo en explicación
-        if sentiment == "Indeterminado":
-             # Intento flexible
-             if "positivo" in response_text.lower(): sentiment = "Positivo"
-             elif "negativo" in response_text.lower(): sentiment = "Negativo"
-             else: sentiment = "Neutro"
-
-        return sentiment, explanation
+        # Format Results
+        granular_results = []
+        for item in all_items:
+            res = batch_results.get(item['internal_id'], {
+                "sentiment": "NEUTRAL", 
+                "score": 0.5, 
+                "reasoning": "Analysis failed"
+            })
+            granular_results.append({
+                "parent_id": item['parent_id'],
+                "type": item['type'],
+                "author": item.get('author', 'Unknown'),
+                "text": item['text'],
+                "sentiment": res['sentiment'],
+                "score": res['score'],
+                "reasoning": res['reasoning']
+            })
+            
+        return granular_results

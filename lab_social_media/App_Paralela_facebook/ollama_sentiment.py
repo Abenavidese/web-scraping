@@ -59,111 +59,98 @@ def _parse_sentiment_results(text):
     return [{"sentiment": label, "reasoning": "Sin explicación disponible"} for label in labels]
 
 
-def classify_comments_sentiment(
-    comment_texts,
-    _unused_api_key=None,
-    model=None,
-    batch_size=15,  # Reducido para mejor calidad de respuesta
-):
+
+# Importar DeepSeek Client desde utils_common
+import sys
+import time
+
+# Asegurar que podemos importar utils_common subiendo un nivel
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+try:
+    from utils_common.deepseek_client import deepseek
+    DEEPSEEK_AVAILABLE = True
+except ImportError as e:
+    DEEPSEEK_AVAILABLE = False
+    print(f"WARNING: Could not import DeepSeek client: {e}")
+
+def analyze_facebook_deepseek_granular(posts_data):
     """
-    Clasifica sentimientos de comentarios usando Ollama con explicabilidad.
-    
-    Args:
-        comment_texts: Lista de textos de comentarios
-        model: Modelo de Ollama a usar
-        batch_size: Tamaño de lote para procesamiento
-    
-    Returns:
-        Lista de diccionarios con 'sentiment' y 'reasoning'
+    Analiza posts de Facebook y sus comentarios de forma granular usando DeepSeek Batch.
+    posts_data: Lista de diccionarios con info de posts.
+    Retorna: DataFrame con análisis detallado.
     """
-    if not comment_texts:
+    if not DEEPSEEK_AVAILABLE or not deepseek.client:
+        print("⚠️ DeepSeek client not available.")
         return []
 
-    model = model or os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+    print(f"   Preparando análisis granular para {len(posts_data)} posts de Facebook...")
     
-    # Prompt mejorado para incluir explicabilidad
-    system_prompt = (
-        "Eres un clasificador de sentimiento para comentarios de redes sociales. "
-        "Debes clasificar cada comentario Y explicar brevemente por qué. "
-        "Responde SOLO con un JSON array con este formato: "
-        '[{"sentiment": "POSITIVO/NEGATIVO/NEUTRAL", "reasoning": "breve explicación"}]. '
-        "No uses markdown ni texto adicional. Solo el JSON array."
-    )
-
-    results = []
-    for batch in _chunk_list(comment_texts, batch_size):
-        user_content = (
-            "Clasifica el sentimiento de estos comentarios en español y explica brevemente cada uno.\n\n"
-            f"Comentarios:\n"
-        )
+    import pandas as pd
+    all_items = []
+    
+    for idx, post in enumerate(posts_data):
+        post_id = str(idx) # Facebook scrape doesn't always have ID
         
-        # Enumerar comentarios para mejor tracking
-        for i, comment in enumerate(batch, 1):
-            user_content += f"{i}. {comment}\n"
-        
-        user_content += (
-            f'\n\nResponde con JSON: [{{"sentiment": "POSITIVO/NEGATIVO/NEUTRAL", "reasoning": "explicación breve"}}]'
-        )
-        
-        payload = {
-            "model": model,
-            "stream": False,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            "options": {
-                "temperature": 0.3,  # Un poco más de creatividad para explicaciones
-                "num_gpu": 99  # Force GPU usage
-            },
-        }
-        
-        try:
-            response = _ollama_request(payload)
-            text = response.get("message", {}).get("content", "").strip()
+        # 1. Post Content
+        content = post.get('content', '').strip()
+        if content:
+            all_items.append({
+                "internal_id": f"fb_post_{idx}",
+                "parent_id": f"post_{idx}",
+                "type": "POST",
+                "text": content
+            })
             
-            # Parsear resultados con explicabilidad
-            parsed_results = _parse_sentiment_results(text)
-            
-            # Validar y normalizar resultados
-            for i in range(len(batch)):
-                if i < len(parsed_results):
-                    result = parsed_results[i]
-                    
-                    # Extraer sentimiento
-                    if isinstance(result, dict):
-                        sentiment = result.get("sentiment", "NEUTRAL")
-                        reasoning = result.get("reasoning", "Sin explicación")
-                    elif isinstance(result, str):
-                        sentiment = result
-                        reasoning = "Sin explicación disponible"
-                    else:
-                        sentiment = "NEUTRAL"
-                        reasoning = "Formato de respuesta inválido"
-                    
-                    # Normalizar sentimiento
-                    sentiment = sentiment.strip().upper()
-                    if sentiment not in ALLOWED_LABELS:
-                        sentiment = "NEUTRAL"
-                    
-                    results.append({
-                        "sentiment": sentiment,
-                        "reasoning": reasoning
-                    })
-                else:
-                    # Fallback si no hay suficientes resultados
-                    results.append({
-                        "sentiment": "NEUTRAL",
-                        "reasoning": "No se pudo analizar el comentario"
-                    })
-                    
-        except Exception as e:
-            # En caso de error, agregar resultados por defecto
-            print(f"Error en clasificación de lote: {e}")
-            for _ in range(len(batch)):
-                results.append({
-                    "sentiment": "NEUTRAL",
-                    "reasoning": f"Error en análisis: {str(e)[:50]}"
+        # 2. Comments
+        comments = post.get('comments', [])
+        for c_idx, comment in enumerate(comments):
+            c_text = comment.get('text', '').strip()
+            if c_text:
+                all_items.append({
+                    "internal_id": f"fb_comment_{idx}_{c_idx}",
+                    "parent_id": f"post_{idx}",
+                    "type": "COMMENT",
+                    "text": c_text
                 })
 
-    return results
+    if not all_items:
+        return []
+
+    # Batch Process
+    print(f"   📤 Enviando {len(all_items)} items a DeepSeek (Batch)...")
+    
+    # Prepare payload for client
+    payload_items = [{"id": x["internal_id"], "text": x["text"]} for x in all_items]
+    batch_results = deepseek.analyze_sentiment_batch(payload_items, context="Facebook")
+    
+    print(f"   📥 Recibidos {len(batch_results)} resultados.")
+
+    # Format Results
+    granular_results = []
+    for item in all_items:
+        res = batch_results.get(item['internal_id'], {
+            "sentiment": "NEUTRAL", 
+            "score": 0.5, 
+            "reasoning": "Analysis failed"
+        })
+        granular_results.append({
+            "parent_id": item['parent_id'],
+            "type": item['type'],
+            "text": item['text'],
+            "sentiment": res['sentiment'],
+            "score": res['score'],
+            "reasoning": res['reasoning']
+        })
+        
+    # Guardar CSV granular inmediatamente
+    try:
+        df = pd.DataFrame(granular_results)
+        df.to_csv("Resultados/sentiment_results_granular.csv", index=False, encoding='utf-8')
+        print("   💾 Granular CSV saved to Resultados/sentiment_results_granular.csv")
+    except Exception as e:
+        print(f"Error saving granular CSV: {e}")
+
+    return granular_results

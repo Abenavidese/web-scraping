@@ -159,50 +159,47 @@ async def main():
     # Generate LLM prompts
     generate_llm_prompts_csv(df_sentiment, output_path="output/llm_prompts.csv")
     
-    # 5. Sentiment Analysis with OpenAI (Automatic)
+    # 5. Sentiment Analysis with DeepSeek
     start_sentiment_time = time.time()
     sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
     total_items_analyzed = 0
     
     print("\n" + "="*60)
-    print("Starting Automatic Sentiment Analysis with OpenAI...")
+    print("Starting Automatic Sentiment Analysis with DeepSeek V3...")
     print("="*60)
     
     try:
-        from sentiment_analyzer import setup_openai, analyze_batch_openai
+        from sentiment_analyzer import analyze_batch_deepseek
         
-        # Configurar OpenAI
-        client = setup_openai()
+        # Analizar sentimientos (el cliente se gestiona internamente)
+        df_results = analyze_batch_deepseek(df_sentiment)
         
-        if client is not None:
-            # Analizar sentimientos
-            df_results = analyze_batch_openai(client, df_sentiment)
-            
-            # Guardar resultados
-            df_results.to_csv("output/sentiment_results.csv", index=False, encoding='utf-8')
-            print(f"\n💾 Sentiment results saved to output/sentiment_results.csv")
-            
-            # Mostrar resumen
-            print("\n📊 Sentiment Summary:")
+        # Guardar resultados
+        df_results.to_csv("output/sentiment_results.csv", index=False, encoding='utf-8')
+        print(f"\n💾 Sentiment results saved to output/sentiment_results.csv")
+        
+        # Mostrar resumen
+        print("\n📊 Sentiment Summary:")
+        if 'sentiment' in df_results.columns:
             sentiment_counts = df_results['sentiment'].value_counts()
             for sentiment, count in sentiment_counts.items():
                 print(f"   {sentiment}: {count}")
-            
+        
             # Calculate sentiment distribution
             total_items_analyzed = len(df_results)
             sentiment_distribution['positive'] = sentiment_counts.get('POSITIVE', sentiment_counts.get('positive', 0))
             sentiment_distribution['negative'] = sentiment_counts.get('NEGATIVE', sentiment_counts.get('negative', 0))
             sentiment_distribution['neutral'] = sentiment_counts.get('NEUTRAL', sentiment_counts.get('neutral', 0))
-            
+        
+        if 'sentiment_score' in df_results.columns:
             avg_score = df_results['sentiment_score'].astype(float).mean()
             print(f"\n📈 Average sentiment score: {avg_score:.2f}")
-        else:
-            print("\n⚠️ Skipping sentiment analysis - OpenAI API key not configured")
-            print("   Set OPENAI_API_KEY in .env to enable automatic sentiment analysis")
-            
+
+    except ImportError:
+        print("\n⚠️ Could not import sentiment_analyzer. Make sure dependencies are installed.")
     except Exception as e:
         print(f"\n⚠️ Sentiment analysis failed: {e}")
-        print("   You can run it manually later with: python sentiment_analyzer.py")
+        # print("   You can run it manually later with: python sentiment_analyzer.py")
     
     end_sentiment_time = time.time()
     end_total_time = time.time()

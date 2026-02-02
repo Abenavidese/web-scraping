@@ -75,16 +75,13 @@ async def main():
     extraction_time = time.time() - start_total_time
 
     # 2. Fase de Procesamiento NLP & LLM
-    print("2. Ejecutando Pipeline NLP y Análisis CONCURRENTE con Grok...")
+    print("2. Ejecutando Pipeline NLP y Análisis CONCURRENTE con Grok (Ahora DeepSeek Granular)...")
     nlp_start_time = time.time()
     
     processor = NLPProcessor(language='spanish')
     llm_analyzer = LLMAnalyzer()
     
     all_tokens = []
-    
-    # Lista de tareas para asyncio.gather (Concurrencia)
-    llm_tasks = []
     
     # Pre-procesamiento sincrónico (limpieza)
     for item in data:
@@ -95,29 +92,73 @@ async def main():
         # Guardamos tokens para BoW
         tokens = processor.process(clean_content)
         all_tokens.extend(tokens)
-        
-        # Preparamos Tarea LLM
-        # Usamos 'grok' forzoso como pidió el usuario
-        llm_tasks.append(analyze_post_concurrently(llm_analyzer, clean_content, "LinkedIn", "grok"))
 
-    # Ejecución Concurrente del LLM
-    print(f"   -> Enviando {len(llm_tasks)} peticiones concurrentes a Grok...")
-    llm_results = await asyncio.gather(*llm_tasks)
-    
-    # Asignar resultados a la data
-    for i, (sentiment, explanation) in enumerate(llm_results):
-        data[i]['sentiment_grok'] = sentiment
-        data[i]['explanation_grok'] = explanation
-        print(f"   [{i+1}] Sentimiento: {sentiment} | Exp: {explanation[:50]}...")
+    # Análisis Granular Batch
+    print(f"   -> Ejecutando análisis granular batch...")
+    granular_results = llm_analyzer.analyze_batch_granular(data)
+
+    # Actualizar Data Original con Sentimientos (Post level)
+    # Mapping back results to data structure for JSON consistency
+    for item in granular_results:
+        # parent_id = post_0
+        if item['type'] == 'POST':
+            try:
+                idx = int(item['parent_id'].split('_')[1])
+                if idx < len(data):
+                    data[idx]['sentiment_deepseek'] = item['sentiment']
+                    data[idx]['explanation_deepseek'] = item['reasoning']
+            except: pass
+            
+    # Imprimir algunos resultados
+    for i, item in enumerate(data):
+        s = item.get('sentiment_deepseek', 'NEUTRAL')
+        e = item.get('explanation_deepseek', 'Sin análisis')
+        print(f"   [{i+1}] Sentimiento: {s} | Exp: {str(e)[:50]}...")
 
     # 3. Reporte y Visualización
     print("3. Generando Reporte...")
     
     os.makedirs('output', exist_ok=True)
-    csv_file = 'output/datos_extraidos_grok.csv'
     
+    # Guardar CSV Granular Principal (Standard para todos los scrapers)
+    import pandas as pd
+    try:
+        df_granular = pd.DataFrame(granular_results)
+        df_granular.to_csv("output/sentiment_results_granular.csv", index=False, encoding='utf-8')
+        print(f"   [CSV] Resultados Granulares guardados: output/sentiment_results_granular.csv")
+    except Exception as e:
+        print(f"   [Error] No se pudo guardar CSV granular: {e}")
+
+    # Guardar CSV extra para comments separados (por compatibilidad solicitada)
+    print("Saving separated sentiment CSVs...")
+    sentiments_lists = { "positivos": [], "negativos": [], "neutros": [] }
+    
+    for item in granular_results:
+        if item['type'] == 'COMMENT':
+            s = item['sentiment'].upper()
+            txt = item['text']
+            # Buscar URL del padre
+            p_idx = int(item['parent_id'].split('_')[1])
+            p_url = "https://linkedin.com" # Placeholder, LinkedIn scraper doesn't fetch specific URL per post easily currently
+            
+            if s == "POSITIVO": sentiments_lists["positivos"].append([txt, p_url])
+            elif s == "NEGATIVO": sentiments_lists["negativos"].append([txt, p_url])
+            else: sentiments_lists["neutros"].append([txt, p_url])
+            
+    for s_type, rows in sentiments_lists.items():
+        csv_name = f"output/comentarios_{s_type}_{args.query}.csv"
+        try:
+            with open(csv_name, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Comentario", "URL Post Original"])
+                writer.writerows(rows)
+            print(f"   Saved {len(rows)} {s_type} comments to: {csv_name}")
+        except: pass
+
+    # CSV Legacy
+    csv_file = 'output/datos_extraidos_deepseek.csv'
     if data:
-        keys = list(data[0].keys()) # Aseguramos orden correcto incluyendo las nuevas columnas
+        keys = list(data[0].keys())
         with open(csv_file, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=keys)
             writer.writeheader()
@@ -147,7 +188,7 @@ async def main():
     print(f"Total Posts Extracted:  {len(data)}")
     print("-" * 50)
     print(f"1. Extraction Phase:    {extraction_time:.2f} seconds")
-    print(f"2. NLP + LLM Analysis:  {nlp_time:.2f} seconds (Grok - Concurrent)")
+    print(f"2. NLP + LLM Analysis:  {nlp_time:.2f} seconds (Batch DeepSeek)")
     print("-" * 50)
     print(f"TOTAL EXECUTION TIME:   {total_time:.2f} seconds")
     print("="*50)
@@ -155,14 +196,12 @@ async def main():
     # Calculate sentiment distribution
     import json
     sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
-    for item in data:
-        s = item.get('sentiment_grok', 'Neutro').lower()
-        if 'positiv' in s:
-            sentiment_distribution["positive"] += 1
-        elif 'negativ' in s:
-            sentiment_distribution["negative"] += 1
-        else:
-            sentiment_distribution["neutral"] += 1
+    # Count from granular results (more accurate)
+    for item in granular_results:
+        s = item['sentiment'].lower()
+        if 'positiv' in s: sentiment_distribution["positive"] += 1
+        elif 'negativ' in s: sentiment_distribution["negative"] += 1
+        else: sentiment_distribution["neutral"] += 1
     
     # Generate metrics JSON for master scraper
     metrics = {

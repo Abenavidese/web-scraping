@@ -80,217 +80,131 @@ POSTS:
     return prompt
 
 
-def analyze_batch_huggingface(client, df_sentiment, model_id="meta-llama/Llama-3.2-3B-Instruct"):
-    """
-    Analiza todos los posts en batch usando Hugging Face.
-    """
-    if client is None:
-        return df_sentiment
-    
-    print(f"\n🔍 Analyzing {len(df_sentiment)} Instagram posts with Hugging Face")
-    print(f"   🤖 Model: {model_id}")
-    print("   💰 Cost: $0.00 (100% FREE!)")
-    
-    # Crear prompt optimizado
-    batch_prompt = create_batch_prompt_hf(df_sentiment)
-    
-    print(f"   📊 Prompt length: ~{len(batch_prompt)} chars")
-    
-    retry_count = 3
-    for attempt in range(retry_count):
-        try:
-            print(f"\n📤 Sending request (attempt {attempt + 1}/{retry_count})...")
-            
-            # Llamar a Hugging Face usando chat completions (conversational)
-            response = client.chat.completions.create(
-                model=model_id,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": batch_prompt
-                    }
-                ],
-                max_tokens=1000,
-                temperature=0.3
-            )
-            
-            # Extraer texto de la respuesta
-            response_text = response.choices[0].message.content
-            
-            print(f"\n✅ Response received ({len(response_text)} chars)")
-            
-            # Limpiar respuesta
-            response_text = response_text.strip()
-            if response_text.startswith('```json'):
-                response_text = response_text.replace('```json', '').replace('```', '').strip()
-            elif response_text.startswith('```'):
-                response_text = response_text.replace('```', '').strip()
-            
-            # Parsear JSON
-            try:
-                start_idx = response_text.find('[')
-                end_idx = response_text.rfind(']') + 1
-                
-                if start_idx != -1 and end_idx > start_idx:
-                    json_str = response_text[start_idx:end_idx]
-                    results = json.loads(json_str)
-                else:
-                    results = json.loads(response_text)
-                
-                if not isinstance(results, list):
-                    print(f"⚠️ Response is not a list (attempt {attempt + 1}/{retry_count})")
-                    print(f"Response preview: {response_text[:200]}")
-                    continue
-                
-                # Actualizar DataFrame
-                print("\n✅ Analysis successful! Updating results...")
-                for idx, row in df_sentiment.iterrows():
-                    post_id = str(row['post_id'])
-                    result = None
-                    
-                    for r in results:
-                        if str(r.get('id')) == post_id or str(r.get('post_id')) == post_id:
-                            result = r
-                            break
-                    
-                    if result is None and idx < len(results):
-                        result = results[idx]
-                    
-                    if result:
-                        sentiment = result.get('sentiment', 'unknown')
-                        score = result.get('score', 0.5)
-                        reasoning = result.get('reasoning', 'No reasoning provided')
-                        
-                        df_sentiment.at[idx, 'sentiment'] = sentiment
-                        df_sentiment.at[idx, 'sentiment_score'] = score
-                        df_sentiment.at[idx, 'sentiment_reasoning'] = reasoning
-                        
-                        print(f"   [{idx + 1}] ✅ {sentiment} (score: {score})")
-                    else:
-                        print(f"   [{idx + 1}] ⚠️ No result")
-                        df_sentiment.at[idx, 'sentiment'] = 'unknown'
-                        df_sentiment.at[idx, 'sentiment_score'] = 0.5
-                        df_sentiment.at[idx, 'sentiment_reasoning'] = 'No result'
-                
-                print("\n✅ Sentiment analysis completed!")
-                return df_sentiment
-                
-            except json.JSONDecodeError as e:
-                print(f"⚠️ JSON parse error (attempt {attempt + 1}/{retry_count}): {e}")
-                print(f"Response preview: {response_text[:300]}")
-                
-        except Exception as e:
-            error_msg = str(e).lower()
-            
-            if 'loading' in error_msg or '503' in error_msg:
-                print(f"   ⏳ Model is loading... waiting 20 seconds")
-                time.sleep(20)
-                continue
-            elif 'rate' in error_msg or '429' in error_msg:
-                print(f"   ⚠️ Rate limit reached, waiting 10 seconds...")
-                time.sleep(10)
-                continue
-            else:
-                print(f"⚠️ Error (attempt {attempt + 1}/{retry_count}): {e}")
-        
-        if attempt < retry_count - 1:
-            print("   Waiting 5 seconds before retry...")
-            time.sleep(5)
-    
-    # Fallback a análisis individual
-    print("\n⚠️ Batch analysis failed, trying individual analysis...")
-    return analyze_individual_huggingface(client, df_sentiment, model_id)
+
+# Importar DeepSeek Client desde utils_common
+import sys
+# Asegurar que podemos importar utils_common subiendo un nivel
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+try:
+    from utils_common.deepseek_client import deepseek
+    DEEPSEEK_AVAILABLE = True
+except ImportError as e:
+    DEEPSEEK_AVAILABLE = False
+    print(f"WARNING: Could not import DeepSeek client: {e}")
 
 
-def analyze_individual_huggingface(client, df_sentiment, model_id="meta-llama/Llama-3.2-3B-Instruct"):
+def analyze_instagram_deepseek(df_sentiment):
     """
-    Analiza posts individualmente como fallback.
+    Analiza posts de Instagram con DeepSeek en BATCH (Granular: Post vs Comentarios).
+    Retorna un nuevo DataFrame con una fila por ITEM validado.
     """
-    print(f"\n🔍 Analyzing {len(df_sentiment)} posts individually...")
+    if not DEEPSEEK_AVAILABLE or not deepseek.client:
+        print("⚠️ DeepSeek client not available. Skipping analysis.")
+        return pd.DataFrame() # Retorna vacío si falla
+    
+    print(f"\n🔍 Preparing granular analysis for {len(df_sentiment)} posts...")
+    
+    # Lista plana de todos los items a analizar (Posts y Comentarios por separado)
+    all_items = []
     
     for idx, row in df_sentiment.iterrows():
+        post_id = str(row['post_id'])
+        post_url = row.get('post_url', '')
+        
+        # 1. Agregar el POST (Caption)
+        caption = str(row['post_caption']).strip()
+        if caption and caption.lower() != 'no caption':
+            all_items.append({
+                "internal_id": f"{post_id}_POST",
+                "post_id": post_id,
+                "post_url": post_url,
+                "type": "POST",
+                "text": caption
+            })
+            
+        # 2. Agregar COMENTARIOS
         try:
             comments_list = json.loads(row['comments_json'])
+            for i, comment in enumerate(comments_list):
+                if comment.strip():
+                    all_items.append({
+                        "internal_id": f"{post_id}_COMMENT_{i}",
+                        "post_id": post_id,
+                        "post_url": post_url,
+                        "type": "COMMENT",
+                        "text": comment
+                    })
+        except:
+            pass # Si falla el json load, ignoramos comentarios
             
-            prompt = f"""Analyze sentiment of this Instagram post based on comments.
-
-POST: {row['post_caption'][:150]}
-
-COMMENTS: {' | '.join([c[:80] for c in comments_list[:5]]) if comments_list else 'NONE'}
-
-Respond ONLY with JSON: {{"sentiment":"positive/negative/neutral/mixed","score":0-1,"reasoning":"brief"}}"""
-            
-            response = client.chat.completions.create(
-                model=model_id,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_tokens=200,
-                temperature=0.3
-            )
-            
-            response_text = response.choices[0].message.content
-            
-            # Limpiar y parsear
-            response_text = response_text.strip()
-            if '```' in response_text:
-                response_text = response_text.replace('```json', '').replace('```', '').strip()
-            
-            start = response_text.find('{')
-            end = response_text.rfind('}') + 1
-            
-            if start != -1 and end > start:
-                json_str = response_text[start:end]
-                data = json.loads(json_str)
-                
-                df_sentiment.at[idx, 'sentiment'] = data.get('sentiment', 'unknown')
-                df_sentiment.at[idx, 'sentiment_score'] = data.get('score', 0.5)
-                df_sentiment.at[idx, 'sentiment_reasoning'] = data.get('reasoning', 'No reasoning')
-                
-                print(f"   [{idx + 1}] ✅ {data.get('sentiment')}")
-            else:
-                raise ValueError("No JSON found")
-                
-        except Exception as e:
-            print(f"   [{idx + 1}] ❌ Error: {e}")
-            df_sentiment.at[idx, 'sentiment'] = 'unknown'
-            df_sentiment.at[idx, 'sentiment_score'] = 0.5
-            df_sentiment.at[idx, 'sentiment_reasoning'] = f'Error: {str(e)[:50]}'
-        
-        time.sleep(1)
+    print(f"   📊 Total items to analyze: {len(all_items)} (Posts + Comments)")
     
-    return df_sentiment
+    if not all_items:
+        return pd.DataFrame()
+
+    # Preparar payload para batch
+    items_payload = []
+    for item in all_items:
+        items_payload.append({
+            "id": item['internal_id'],
+            "text": item['text']
+        })
+
+    # Llamada batch
+    print(f"   📤 Sending batch to DeepSeek API...")
+    batch_results = deepseek.analyze_sentiment_batch(items_payload, context="Instagram Social Media")
+    print(f"   📥 Received {len(batch_results)} results.")
+
+    # Construir DataFrame final detallado
+    granular_data = []
+    
+    for item in all_items:
+        res = batch_results.get(item['internal_id'], {
+            "sentiment": "NEUTRAL", 
+            "score": 0.5, 
+            "reasoning": "Analysis failed or timed out"
+        })
+        
+        granular_data.append({
+            "post_id": item['post_id'],
+            "post_url": item['post_url'],
+            "item_type": item['type'],
+            "text_content": item['text'],
+            "sentiment": res['sentiment'],
+            "sentiment_score": res['score'],
+            "sentiment_reasoning": res['reasoning']
+        })
+
+    print(f"\n✅ DeepSeek granular analysis completed!")
+    return pd.DataFrame(granular_data)
 
 
 def main_sentiment_analysis_instagram(input_csv='Resultados/sentiment_input.csv',
                                      output_csv='Resultados/sentiment_results.csv',
                                      api_key=None,
-                                     model_id="meta-llama/Llama-3.2-3B-Instruct"):
+                                     model_id=None):
     """
-    Análisis de sentimientos para Instagram con Hugging Face.
+    Análisis de sentimientos para Instagram con DeepSeek.
     """
     print("=" * 60)
-    print("Instagram Sentiment Analysis with Hugging Face (FREE)")
+    print("Instagram Sentiment Analysis with DeepSeek")
     print("=" * 60)
     print()
     
+    if not os.path.exists(input_csv):
+        print(f"❌ Input file not found: {input_csv}")
+        return None
+
     # Cargar datos
     print(f"Loading data from {input_csv}...")
     df_sentiment = pd.read_csv(input_csv)
     print(f"Loaded {len(df_sentiment)} posts\n")
     
-    # Configurar Hugging Face
-    client = setup_huggingface(api_key)
-    
-    if client is None:
-        print("Cannot proceed without Hugging Face configuration")
-        return df_sentiment
-    
-    # Analizar en batch
-    df_results = analyze_batch_huggingface(client, df_sentiment, model_id)
+    # Analizar
+    df_results = analyze_instagram_deepseek(df_sentiment)
     
     # Guardar
     df_results.to_csv(output_csv, index=False, encoding='utf-8')
@@ -298,12 +212,14 @@ def main_sentiment_analysis_instagram(input_csv='Resultados/sentiment_input.csv'
     
     # Resumen
     print("\n📊 Sentiment Summary:")
-    sentiment_counts = df_results['sentiment'].value_counts()
-    for sentiment, count in sentiment_counts.items():
-        print(f"   {sentiment}: {count}")
+    if 'sentiment' in df_results.columns:
+        sentiment_counts = df_results['sentiment'].value_counts()
+        for sentiment, count in sentiment_counts.items():
+            print(f"   {sentiment}: {count}")
     
-    avg_score = df_results['sentiment_score'].astype(float).mean()
-    print(f"\n📈 Average sentiment score: {avg_score:.2f}")
+    if 'sentiment_score' in df_results.columns:
+        avg_score = df_results['sentiment_score'].astype(float).mean()
+        print(f"\n📈 Average sentiment score: {avg_score:.2f}")
     
     return df_results
 

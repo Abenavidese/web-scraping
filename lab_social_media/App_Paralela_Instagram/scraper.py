@@ -304,7 +304,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             total_comments_analyzed = 0
             
             try:
-                print("\n--- Starting Sentiment Analysis (Hugging Face - FREE) ---")
+                print("\n--- Starting Sentiment Analysis (DeepSeek) ---")
                 import sentiment_prep
                 import sentiment_analyzer_hf as sentiment_analyzer
                 
@@ -318,12 +318,12 @@ def run(search_query=None, num_posts=None, num_comments=None):
                     df_sentiment.to_csv(sentiment_input_path, index=False, encoding='utf-8')
                     print(f"Sentiment input saved to: {sentiment_input_path}")
                     
-                    # Generate LLM prompts
+                    # Generate LLM prompts (Legacy but kept for compatibility)
                     prompts_path = os.path.join(output_dir, f"llm_prompts_{search_query}.csv")
-                    sentiment_prep.generate_llm_prompts_csv_instagram(df_sentiment, prompts_path)
+                    # sentiment_prep.generate_llm_prompts_csv_instagram(df_sentiment, prompts_path)
                     
-                    # Run sentiment analysis with Hugging Face (FREE!)
-                    print("\nAnalyzing sentiment with Hugging Face (100% FREE)...")
+                    # Run sentiment analysis with DeepSeek
+                    print("\nAnalyzing sentiment with DeepSeek...")
                     sentiment_results_path = os.path.join(output_dir, f"sentiment_results_{search_query}.csv")
                     df_results = sentiment_analyzer.main_sentiment_analysis_instagram(
                         input_csv=sentiment_input_path,
@@ -345,11 +345,9 @@ def run(search_query=None, num_posts=None, num_comments=None):
                     
             except ImportError as e:
                 print(f"\n⚠️ Sentiment analysis modules not available: {e}")
-                print("Install required packages: pip install requests python-dotenv")
             except Exception as e:
                 print(f"\n⚠️ Error during sentiment analysis: {e}")
-                print("Make sure HUGGINGFACE_API_KEY is set in .env")
-                print("Get your FREE API key at: https://huggingface.co/settings/tokens")
+                print("Make sure DEEPSEEK_API_KEY is set in .env")
 
             end_sentiment_time = time.time()
             end_total_time = time.time()
