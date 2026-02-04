@@ -14,10 +14,12 @@ import sys
 import os
 
 # Fix Windows encoding
+# Fix Windows encoding
 if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    # import io
+    # sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    # sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    pass
 
 
 class DataUnifier:
@@ -71,9 +73,18 @@ class DataUnifier:
                 
                 -- Metadata
                 query VARCHAR(255),
-                num_comments INTEGER DEFAULT 0
+                num_comments INTEGER DEFAULT 0,
+                user_id VARCHAR(255) DEFAULT 'default'
             )
         ''')
+        
+        # Add user_id column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute('ALTER TABLE posts ADD COLUMN user_id VARCHAR(255) DEFAULT "default"')
+            self.conn.commit()
+            print("✅ Added user_id column to posts table")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         
         # Table: comments
         cursor.execute('''
@@ -87,10 +98,19 @@ class DataUnifier:
                 processed_text TEXT,
                 created_at TIMESTAMP,
                 scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                user_id VARCHAR(255) DEFAULT 'default',
                 
                 FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
             )
         ''')
+        
+        # Add user_id column to comments if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE comments ADD COLUMN user_id VARCHAR(255) DEFAULT "default"')
+            self.conn.commit()
+            print("✅ Added user_id column to comments table")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         
         # Table: analytics
         cursor.execute('''
@@ -119,9 +139,18 @@ class DataUnifier:
                 
                 -- Performance
                 posts_per_second FLOAT,
-                avg_time_per_post FLOAT
+                avg_time_per_post FLOAT,
+                user_id VARCHAR(255) DEFAULT 'default'
             )
         ''')
+        
+        # Add user_id column to analytics if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE analytics ADD COLUMN user_id VARCHAR(255) DEFAULT "default"')
+            self.conn.commit()
+            print("✅ Added user_id column to analytics table")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
         
         # Table: queries (track search queries)
         cursor.execute('''
@@ -172,28 +201,32 @@ class DataUnifier:
             for _, row in df.iterrows():
                 # Insert post
                 try:
+                    # Detectar el campo de sentimiento (puede ser 'sentiment' o 'sentiment_deepseek')
+                    sentiment_field = 'sentiment_deepseek' if 'sentiment_deepseek' in row else 'sentiment'
+                    explanation_field = 'explanation_deepseek' if 'explanation_deepseek' in row else 'sentiment_reasoning'
+                    
                     cursor.execute('''
                         INSERT OR REPLACE INTO posts 
                         (post_id, network, author, text, url, processed_text, 
                          sentiment, sentiment_score, sentiment_reasoning, query, num_comments, user_id)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        str(row['post_id']),
+                        str(row.get('post_id', f"{network}_{_}")),
                         network,
-                        str(row.get('post_author', '')),
-                        str(row.get('post_text', '')),
-                        str(row.get('post_url', '')),
-                        str(row.get('post_processed', '')),
-                        str(row.get('sentiment', 'unknown')),
+                        str(row.get('post_author', row.get('author', ''))),
+                        str(row.get('post_text', row.get('content', row.get('text', '')))),
+                        str(row.get('post_url', row.get('url', ''))),
+                        str(row.get('post_processed', row.get('content', ''))),
+                        str(row.get(sentiment_field, 'unknown')),
                         float(row.get('sentiment_score', 0.5)),
-                        str(row.get('sentiment_reasoning', '')),
+                        str(row.get(explanation_field, '')),
                         query,
                         int(row.get('num_comments', 0)),
                         user_id
                     ))
                     posts_imported += 1
                 except Exception as e:
-                    print(f"   ⚠️ Error importing post {row.get('post_id')}: {e}")
+                    print(f"   ⚠️ Error importing post {row.get('post_id', _)}: {e}")
                     continue
                 
                 # Insert comments

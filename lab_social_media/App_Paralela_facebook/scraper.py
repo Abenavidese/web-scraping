@@ -544,6 +544,33 @@ def run():
         print("\n--- Starting Post-Processing Sentiment Analysis (Decoupled) ---")
         start_sentiment_time = time.time()
         
+        # First, analyze post captions
+        if posts_data:
+            print(f"\nAnalyzing sentiments for {len(posts_data)} post captions...")
+            post_captions = [post.get("caption_snippet", "") for post in posts_data]
+            try:
+                post_sentiment_results = classify_comments_sentiment(post_captions, None, batch_size=15)
+                for i, post in enumerate(posts_data):
+                    if i < len(post_sentiment_results):
+                        result = post_sentiment_results[i]
+                        if isinstance(result, dict):
+                            post["sentiment"] = result.get("sentiment", "NEUTRAL")
+                            post["sentiment_reasoning"] = result.get("reasoning", "Sin explicación")
+                        else:
+                            post["sentiment"] = result
+                            post["sentiment_reasoning"] = "Sin explicación disponible"
+                    else:
+                        post["sentiment"] = "NEUTRAL"
+                        post["sentiment_reasoning"] = "No analizado"
+                print("✅ Post sentiment analysis complete.")
+            except Exception as e:
+                print(f"Error during post sentiment analysis: {e}")
+                # If analysis fails, set defaults
+                for post in posts_data:
+                    post["sentiment"] = "NEUTRAL"
+                    post["sentiment_reasoning"] = "Error en análisis"
+        
+        # Then analyze comments
         all_comments_texts = []
         for post in posts_data:
             for comment in post.get("comments", []):
@@ -572,9 +599,9 @@ def run():
                             comment["sentiment"] = "NEUTRAL"
                             comment["sentiment_reasoning"] = "No analizado"
                         global_idx += 1
-                print("✅ Sentiment analysis with explainability complete.")
+                print("✅ Comment sentiment analysis complete.")
             except Exception as e:
-                print(f"Error during sentiment analysis: {e}")
+                print(f"Error during comment sentiment analysis: {e}")
         
         # Update JSON
         with open(filename, "w", encoding="utf-8") as f:
@@ -610,6 +637,28 @@ def run():
                 print(f"  Saved {len(rows)} {s_type} comments to: {csv_name}")
             except Exception as e:
                 print(f"  Error saving {s_type} CSV: {e}")
+        
+        # --- Generate Posts CSV with Sentiment (for import) ---
+        print("\n--- Generating Posts CSV with Sentiment ---")
+        posts_csv_name = os.path.join(output_dir, f"datos_extraidos_deepseek.csv")
+        try:
+            with open(posts_csv_name, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["source", "title", "content", "comments", "sentiment_deepseek", "explanation_deepseek"])
+                
+                for post in posts_data:
+                    source = "facebook"
+                    title = post.get("post_url", "N/A")
+                    content = post.get("caption_snippet", "")
+                    comments_json = json.dumps(post.get("comments", []), ensure_ascii=False)
+                    sentiment = post.get("sentiment", "NEUTRAL")
+                    explanation = post.get("sentiment_reasoning", "Sin explicación")
+                    
+                    writer.writerow([source, title, content, comments_json, sentiment, explanation])
+            
+            print(f"✅ Saved {len(posts_data)} posts with sentiment to: {posts_csv_name}")
+        except Exception as e:
+            print(f"❌ Error saving posts CSV: {e}")
         
         # --- Automatic Processing ---
         try:

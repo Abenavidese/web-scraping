@@ -32,6 +32,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { sentimentLLM, currentUserPlan, type SocialNetwork } from "@/lib/mock-data"
+import { useAuth } from "@/contexts/auth-context"
+import { api } from "@/lib/api"
+import { useToast } from "@/components/ui/use-toast"
 
 const networks: { id: SocialNetwork; name: string; icon: string; color: string }[] = [
   { id: "facebook", name: "Facebook", icon: "f", color: "#1877F2" },
@@ -67,7 +70,12 @@ export default function NuevaConsultaPage() {
   const [includePosts, setIncludePosts] = useState(true)
   const [cleaningLevel, setCleaningLevel] = useState("normal")
   const [selectedNetworks, setSelectedNetworks] = useState<SocialNetwork[]>(["facebook", "instagram", "x", "linkedin"])
-  
+  const [isCustomLimits, setIsCustomLimits] = useState(false)
+  const [networkLimits, setNetworkLimits] = useState<Record<string, number>>({})
+
+  const { user } = useAuth()
+  const { toast } = useToast()
+
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>([])
 
@@ -86,10 +94,20 @@ export default function NuevaConsultaPage() {
   const startAnalysis = async () => {
     if (!query.trim() || selectedNetworks.length === 0) return
 
+    if (!user) {
+      toast({
+        title: "Error de autenticación",
+        description: "Debes iniciar sesión para realizar consultas",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsAnalyzing(true)
 
     // Initialize steps
     const initialSteps: AnalysisStep[] = [
+      { id: "request", name: "Iniciando solicitud", status: "running", progress: 0 },
       ...selectedNetworks.map(network => ({
         id: `extract-${network}`,
         name: `Extraccion ${networks.find(n => n.id === network)?.name}`,
@@ -97,40 +115,46 @@ export default function NuevaConsultaPage() {
         progress: 0,
         network,
       })),
-      { id: "preprocessing", name: "Preprocesamiento NLP", status: "pending", progress: 0 },
-      { id: "sentiment", name: `Clasificacion de sentimiento (${sentimentLLM})`, status: "pending", progress: 0 },
-      { id: "consolidation", name: "Consolidacion global", status: "pending", progress: 0 },
+      { id: "processing", name: "Procesando resultados", status: "pending", progress: 0 },
     ]
 
     setAnalysisSteps(initialSteps)
 
-    // Simulate analysis progress
-    for (let i = 0; i < initialSteps.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      setAnalysisSteps(prev => prev.map((step, idx) => {
-        if (idx === i) return { ...step, status: "running", progress: 0 }
-        return step
-      }))
+    try {
+      // Send request to API
+      const result = await api.scrape({
+        networks: selectedNetworks,
+        query: query,
+        num_posts: maxResults[0],
+        num_comments: includeComments ? 10 : 0, // Default to 10 comments if checked
+        user_id: user.id,
+        limits: isCustomLimits ? networkLimits : undefined
+      })
 
-      // Simulate progress
-      for (let p = 0; p <= 100; p += 20) {
-        await new Promise(resolve => setTimeout(resolve, 150))
-        setAnalysisSteps(prev => prev.map((step, idx) => {
-          if (idx === i) return { ...step, progress: p }
-          return step
-        }))
-      }
+      // On success (the API currently waits for completion, so this blocks until done)
+      // If we want real-time updates we need sockets, but for now we simulate or just valid
 
-      setAnalysisSteps(prev => prev.map((step, idx) => {
-        if (idx === i) return { ...step, status: "done", progress: 100 }
-        return step
-      }))
+      setAnalysisSteps(prev => prev.map(s => ({ ...s, status: "done", progress: 100 })))
+
+      toast({
+        title: "Análisis completado",
+        description: `Se han procesado ${result.successful} redes exitosamente.`,
+      })
+
+      // Redirect to results
+      await new Promise(resolve => setTimeout(resolve, 800))
+      router.push("/resultados")
+
+    } catch (error) {
+      console.error(error)
+      setAnalysisSteps(prev => prev.map(s => ({ ...s, status: "error" })))
+      toast({
+        title: "Error en el análisis",
+        description: error instanceof Error ? error.message : "Error desconocido",
+        variant: "destructive",
+      })
+      setTimeout(() => setIsAnalyzing(false), 2000)
     }
-
-    // Redirect to results
-    await new Promise(resolve => setTimeout(resolve, 500))
-    router.push("/resultados")
   }
 
   return (
@@ -258,6 +282,42 @@ export default function NuevaConsultaPage() {
                   <p className="text-xs text-muted-foreground">
                     Cantidad maxima de comentarios/publicaciones a extraer de cada red social
                   </p>
+
+                  <div className="flex items-center space-x-2 pt-2">
+                    <Checkbox
+                      id="custom-limits"
+                      checked={isCustomLimits}
+                      onCheckedChange={(checked) => setIsCustomLimits(!!checked)}
+                    />
+                    <Label htmlFor="custom-limits">Personalizar límites por red</Label>
+                  </div>
+
+                  {isCustomLimits && (
+                    <div className="grid grid-cols-2 gap-4 pt-2 p-4 bg-muted/20 rounded-lg border">
+                      {selectedNetworks.map(netId => {
+                        const net = networks.find(n => n.id === netId)
+                        return (
+                          <div key={netId} className="space-y-1">
+                            <Label className="text-xs">{net?.name}</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={networkLimits[netId] || maxResults[0]}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0
+                                setNetworkLimits(prev => ({ ...prev, [netId]: val }))
+                              }}
+                              className="h-8"
+                            />
+                          </div>
+                        )
+                      })}
+                      {selectedNetworks.length === 0 && (
+                        <div className="col-span-2 text-xs text-muted-foreground">Selecciona redes para customizar sus límites</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Content Type */}
@@ -299,8 +359,8 @@ export default function NuevaConsultaPage() {
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
                         <p>
-                          El preprocesamiento NLP incluye tokenizacion, eliminacion de stopwords 
-                          y stemming/lematizacion. Niveles mas agresivos eliminan mas ruido 
+                          El preprocesamiento NLP incluye tokenizacion, eliminacion de stopwords
+                          y stemming/lematizacion. Niveles mas agresivos eliminan mas ruido
                           pero pueden perder contexto.
                         </p>
                       </TooltipContent>
@@ -346,11 +406,10 @@ export default function NuevaConsultaPage() {
                   {networks.map((network) => (
                     <div
                       key={network.id}
-                      className={`relative flex items-center gap-4 rounded-lg border p-4 cursor-pointer transition-colors ${
-                        selectedNetworks.includes(network.id)
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-muted-foreground/50"
-                      }`}
+                      className={`relative flex items-center gap-4 rounded-lg border p-4 cursor-pointer transition-colors ${selectedNetworks.includes(network.id)
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/50"
+                        }`}
                       onClick={() => toggleNetwork(network.id)}
                     >
                       <div
@@ -403,8 +462,8 @@ export default function NuevaConsultaPage() {
                   </div>
                 </div>
 
-                <Progress 
-                  value={((currentUserPlan.wordsUsed + estimatedWords) / currentUserPlan.wordsLimit) * 100} 
+                <Progress
+                  value={((currentUserPlan.wordsUsed + estimatedWords) / currentUserPlan.wordsLimit) * 100}
                   className="h-2"
                 />
 
@@ -514,6 +573,6 @@ export default function NuevaConsultaPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </TooltipProvider>
+    </TooltipProvider >
   )
 }

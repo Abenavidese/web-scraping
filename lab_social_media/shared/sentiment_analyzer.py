@@ -293,19 +293,43 @@ class DeepSeekSentimentAnalyzer:
         elif text.startswith('```'):
             text = text.replace('```', '').strip()
         
-        # Extract JSON object or array
-        if '{' in text:
-            start = text.find('{')
-            end = text.rfind('}') + 1
+        # Extract JSON array or object - be more aggressive
+        # Look for the FIRST opening bracket and LAST matching closing bracket
+        if '[' in text:
+            start = text.find('[')
+            # Find the matching closing bracket by counting
+            bracket_count = 0
+            end = -1
+            for i in range(start, len(text)):
+                if text[i] == '[':
+                    bracket_count += 1
+                elif text[i] == ']':
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        end = i + 1
+                        break
+            
             if start != -1 and end > start:
                 text = text[start:end]
-        elif '[' in text:
-            start = text.find('[')
-            end = text.rfind(']') + 1
+        elif '{' in text:
+            start = text.find('{')
+            # Find the matching closing brace
+            brace_count = 0
+            end = -1
+            for i in range(start, len(text)):
+                if text[i] == '{':
+                    brace_count += 1
+                elif text[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = i + 1
+                        break
+            
             if start != -1 and end > start:
                 text = text[start:end]
         
-        return text
+        return text.strip()
+
     
     def _parse_response(self, response_text: str, expected_count: int) -> List[Dict[str, Any]]:
         """Parse and validate response"""

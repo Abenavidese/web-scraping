@@ -61,7 +61,7 @@ class ScraperManager:
         except Exception:
             return None
     
-    def run_scrapers(self, networks, query, num_posts=10, num_comments=5):
+    def run_scrapers(self, networks, query, num_posts=10, num_comments=5, user_id='default', limits=None):
         """
         Run selected scrapers in parallel using subprocess.Popen
         
@@ -70,6 +70,8 @@ class ScraperManager:
             query (str): Search query
             num_posts (int): Number of posts per network
             num_comments (int): Number of comments per post
+            user_id (str): User ID for data isolation (default: 'default')
+            limits (dict): Optional dictionary mapping network keys to post counts (e.g. {'x': 50})
             
         Returns:
             dict: Results from all scrapers
@@ -90,12 +92,20 @@ class ScraperManager:
         for network_key in valid_networks:
             config = self.scrapers[network_key]
             
+            # Determine number of posts for this network
+            cnt_posts = num_posts
+            if limits and network_key in limits:
+                try:
+                    cnt_posts = int(limits[network_key])
+                except:
+                    pass
+
             # Build command
             command = [
                 sys.executable,
                 config['script'],
                 '--query', query,
-                '--posts', str(num_posts),
+                '--posts', str(cnt_posts),
                 '--comments', str(num_comments)
             ]
             
@@ -110,7 +120,8 @@ class ScraperManager:
                     stderr=subprocess.PIPE,
                     text=True,
                     encoding='utf-8',
-                    errors='replace'
+                    errors='replace',
+                    env={**os.environ, 'USER_ID': user_id}
                 )
                 
                 running_processes.append({

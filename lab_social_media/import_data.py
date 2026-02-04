@@ -67,7 +67,11 @@ def main():
     print("\n" + "-" * 70)
     print("2. INSTAGRAM")
     print("-" * 70)
-    ig_sentiment = f"users/{user_id}/instagram/{query_slug}/sentiment_results.csv"
+    # Instagram usa sentiment_results_{query}.csv
+    ig_sentiment = f"users/{user_id}/instagram/{query_slug}/sentiment_results_{query_slug}.csv"
+    if not os.path.exists(ig_sentiment):
+        # Fallback: buscar sentiment_results.csv sin nombre de query
+        ig_sentiment = f"users/{user_id}/instagram/{query_slug}/sentiment_results.csv"
     ig_metrics = f"users/{user_id}/instagram/{query_slug}/metrics.json"
     
     if os.path.exists(ig_sentiment):
@@ -81,7 +85,15 @@ def main():
     print("\n" + "-" * 70)
     print("3. FACEBOOK")
     print("-" * 70)
-    fb_sentiment = f"users/{user_id}/facebook/{query_slug}/sentiment_results.csv"
+    # Facebook ahora usa datos_extraidos_deepseek.csv igual que LinkedIn
+    fb_sentiment = f"users/{user_id}/facebook/{query_slug}/datos_extraidos_deepseek.csv"
+    if not os.path.exists(fb_sentiment):
+        # Fallback a formatos antiguos
+        fb_sentiment = f"users/{user_id}/facebook/{query_slug}/sentiment_results_{query_slug}.csv"
+    if not os.path.exists(fb_sentiment):
+        fb_sentiment = f"users/{user_id}/facebook/{query_slug}/sentiment_results.csv"
+    if not os.path.exists(fb_sentiment):
+        fb_sentiment = f"users/{user_id}/facebook/{query_slug}/processed_facebook_{query_slug}.csv"
     fb_metrics = f"users/{user_id}/facebook/{query_slug}/metrics.json"
     
     if os.path.exists(fb_sentiment):
@@ -95,7 +107,11 @@ def main():
     print("\n" + "-" * 70)
     print("4. LINKEDIN")
     print("-" * 70)
-    li_sentiment = f"users/{user_id}/linkedin/{query_slug}/sentiment_results.csv"
+    # LinkedIn usa datos_extraidos_deepseek.csv
+    li_sentiment = f"users/{user_id}/linkedin/{query_slug}/datos_extraidos_deepseek.csv"
+    if not os.path.exists(li_sentiment):
+        # Fallback
+        li_sentiment = f"users/{user_id}/linkedin/{query_slug}/sentiment_results.csv"
     li_metrics = f"users/{user_id}/linkedin/{query_slug}/metrics.json"
     
     if os.path.exists(li_sentiment):

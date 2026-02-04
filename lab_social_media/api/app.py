@@ -7,7 +7,9 @@ Provides endpoints to access unified social media data
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sys
+import sys
 import os
+import re
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,6 +33,13 @@ CORS(app)  # Enable CORS for frontend access
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'social_media.db')
 unifier = DataUnifier(DB_PATH)
 chat_manager = ChatManager()
+
+def slugify(text):
+    """Convert text to slug format for directory names"""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    return text.strip('_')
 
 # ============================================================================
 # API ENDPOINTS
@@ -179,11 +188,25 @@ def get_sentiments():
                     'total': 0
                 }
             
-            sentiment = item['sentiment']
+            sentiment = item['sentiment'].lower()  # Normalize to lowercase
             count = item['count']
             
-            if sentiment in summary[net]:
-                summary[net][sentiment] = count
+            # Map sentiment variations to standard keys
+            sentiment_mapping = {
+                'positivo': 'positive',
+                'positive': 'positive',
+                'negativo': 'negative',
+                'negative': 'negative',
+                'neutro': 'neutral',
+                'neutral': 'neutral',
+                'mixed': 'mixed',
+                'mixto': 'mixed',
+                'unknown': None  # Ignore unknown sentiments
+            }
+            
+            mapped_sentiment = sentiment_mapping.get(sentiment)
+            if mapped_sentiment and mapped_sentiment in summary[net]:
+                summary[net][mapped_sentiment] += count
             summary[net]['total'] += count
         
         return jsonify({
@@ -390,6 +413,8 @@ def run_scrapers():
         # Get optional parameters
         num_posts = data.get('num_posts', 10)
         num_comments = data.get('num_comments', 5)
+        user_id = data.get('user_id', 'default')
+        limits = data.get('limits', {})
         
         # Validate types
         if not isinstance(networks, list):
@@ -422,9 +447,41 @@ def run_scrapers():
             networks=networks,
             query=query,
             num_posts=num_posts,
-            num_comments=num_comments
+            num_comments=num_comments,
+
+            user_id=user_id,
+            limits=limits
         )
         
+
+        
+        # Auto-import data into database
+        if result['success']:
+            slug = slugify(query)
+            users_dir = os.path.join(base_dir, 'users')
+            
+            for scraper_res in result.get('results', []):
+                if scraper_res.get('status') == 'success':
+                    network = scraper_res['network']
+                    print(f"📥 Importing data for {network}...", flush=True)
+                    
+                    # Construct paths
+                    # Path: users/{user_id}/{network}/{slug}/
+                    data_dir = os.path.join(users_dir, user_id, network, slug)
+                    
+                    sentiment_csv = os.path.join(data_dir, 'sentiment_results.csv')
+                    sentiment_csv_alt = os.path.join(data_dir, 'datos_extraidos_deepseek.csv')
+                    metrics_json = os.path.join(data_dir, 'metrics.json')
+                    
+                    # Import
+                    if os.path.exists(sentiment_csv):
+                         unifier.import_from_csv(network, sentiment_csv, query, user_id)
+                    elif os.path.exists(sentiment_csv_alt):
+                         unifier.import_from_csv(network, sentiment_csv_alt, query, user_id)
+                    
+                    if os.path.exists(metrics_json):
+                         unifier.import_metrics(network, metrics_json, user_id)
+
         return jsonify(result)
     
     except Exception as e:
