@@ -182,50 +182,45 @@ async def main():
     # Generate LLM prompts
     generate_llm_prompts_csv(df_sentiment, output_path=os.path.join(output_dir, "llm_prompts.csv"))
     
-    # 5. Sentiment Analysis with OpenAI (Automatic)
+    # 5. Sentiment Analysis with DeepSeek (Automatic)
     start_sentiment_time = time.time()
     sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
     total_items_analyzed = 0
     
     print("\n" + "="*60)
-    print("Starting Automatic Sentiment Analysis with OpenAI...")
+    print("Starting Automatic Sentiment Analysis with DeepSeek...")
     print("="*60)
     
     try:
-        from sentiment_analyzer import setup_openai, analyze_batch_openai
+        from sentiment_analyzer import main_sentiment_analysis
         
-        # Configurar OpenAI
-        client = setup_openai()
+        # Analizar sentimientos usando la función principal de sentiment_analyzer.py
+        # Esto automáticamente carga .env, inicializa DeepSeek y corre el batch
+        df_results = main_sentiment_analysis(
+            input_csv=sentiment_input_path,
+            output_csv=os.path.join(output_dir, "sentiment_results.csv")
+        )
         
-        if client is not None:
-            # Analizar sentimientos
-            df_results = analyze_batch_openai(client, df_sentiment)
+        if df_results is not None and not df_results.empty and 'sentiment' in df_results.columns:
+            print(f"\nOptimization: Using centralized DeepSeek Analyzer")
             
-            # Guardar resultados
-            sentiment_results_path = os.path.join(output_dir, "sentiment_results.csv")
-            df_results.to_csv(sentiment_results_path, index=False, encoding='utf-8')
-            print(f"\n💾 Sentiment results saved to {sentiment_results_path}")
-            
-            # Mostrar resumen
-            print("\n📊 Sentiment Summary:")
+            # Calculate sentiment distribution from results
             sentiment_counts = df_results['sentiment'].value_counts()
-            for sentiment, count in sentiment_counts.items():
-                print(f"   {sentiment}: {count}")
             
-            # Calculate sentiment distribution
+            # Update distribution for final report
+            sentiment_distribution['positive'] = int(sentiment_counts.get('POSITIVE', sentiment_counts.get('positive', 0)))
+            sentiment_distribution['negative'] = int(sentiment_counts.get('NEGATIVE', sentiment_counts.get('negative', 0)))
+            sentiment_distribution['neutral'] = int(sentiment_counts.get('NEUTRAL', sentiment_counts.get('neutral', 0)))
+            
             total_items_analyzed = len(df_results)
-            sentiment_distribution['positive'] = sentiment_counts.get('POSITIVE', sentiment_counts.get('positive', 0))
-            sentiment_distribution['negative'] = sentiment_counts.get('NEGATIVE', sentiment_counts.get('negative', 0))
-            sentiment_distribution['neutral'] = sentiment_counts.get('NEUTRAL', sentiment_counts.get('neutral', 0))
             
-            avg_score = df_results['sentiment_score'].astype(float).mean()
-            print(f"\n📈 Average sentiment score: {avg_score:.2f}")
         else:
-            print("\n⚠️ Skipping sentiment analysis - OpenAI API key not configured")
-            print("   Set OPENAI_API_KEY in .env to enable automatic sentiment analysis")
+            print("\nScaling Warning: No results returned from analysis")
             
     except Exception as e:
-        print(f"\n⚠️ Sentiment analysis failed: {e}")
+        print(f"\nSentiment analysis failed: {e}")
+        import traceback
+        traceback.print_exc()
         print("   You can run it manually later with: python sentiment_analyzer.py")
     
     end_sentiment_time = time.time()
@@ -266,7 +261,7 @@ async def main():
     
     metrics = {
         "social_network": "X (Twitter)",
-        "llm_used": "OpenAI",
+        "llm_used": "DeepSeek",
         "query": SEARCH_QUERY,
         "execution_times": {
             "scraping": round(scraping_duration, 2),

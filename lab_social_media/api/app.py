@@ -13,6 +13,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.data_unifier import DataUnifier
+from shared.chat_manager import ChatManager
 
 # Fix Windows encoding
 # Fix Windows encoding
@@ -29,6 +30,7 @@ CORS(app)  # Enable CORS for frontend access
 # Initialize database
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'social_media.db')
 unifier = DataUnifier(DB_PATH)
+chat_manager = ChatManager()
 
 # ============================================================================
 # API ENDPOINTS
@@ -450,6 +452,32 @@ def internal_error(error):
         'success': False,
         'error': 'Internal server error'
     }), 500
+
+
+@app.route('/api/chat-with-data', methods=['POST'])
+def chat_with_data():
+    """Endpoint for chatting with the latest extracted data."""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        user_id = data.get('user_id')
+        message = data.get('message')
+        
+        if not user_id or not message:
+            return jsonify({'error': 'Missing user_id or message'}), 400
+            
+        result = chat_manager.chat(user_id, message)
+        
+        if "error" in result:
+             return jsonify({'error': result['error']}), 500
+             
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Chat Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================

@@ -17,6 +17,7 @@ import config
 import time
 import os
 import csv
+import json
 import re
 from dotenv import load_dotenv
 
@@ -109,18 +110,32 @@ async def main():
     # Lista de tareas para asyncio.gather (Concurrencia)
     llm_tasks = []
     
-    # Pre-procesamiento sincrónico (limpieza)
+    # Contar comentarios totales
+    total_comments = 0
+    for item in data:
+        if 'comments' in item and item['comments']:
+            total_comments += len(item['comments'])
+    
+    print(f"   -> Total posts: {len(data)} | Total comentarios: {total_comments}")
+    
+    # Pre-procesamiento sincrónico (limpieza) - Solo Posts
     for item in data:
         raw_content = item['content'].replace('\n', ' ').replace('\r', '').strip()
         clean_content = processor.clean_text(raw_content)
         item['content'] = clean_content # Actualizamos data limpia
         
-        # Guardamos tokens para BoW
+        # Guardamos tokens para BoW (incluir comentarios)
         tokens = processor.process(clean_content)
         all_tokens.extend(tokens)
         
-        # Preparamos Tarea LLM
-        # Usamos 'deepseek' como proveedor centralizado
+        # Tokens de comentarios para BoW
+        if 'comments' in item and item['comments']:
+            for comment in item['comments']:
+                clean_comment = processor.clean_text(comment)
+                tokens_comment = processor.process(clean_comment)
+                all_tokens.extend(tokens_comment)
+        
+        # Preparamos Tarea LLM solo para el POST
         llm_tasks.append(analyze_post_concurrently(llm_analyzer, clean_content, "LinkedIn", "deepseek"))
 
     # Ejecución Concurrente del LLM
@@ -139,11 +154,20 @@ async def main():
     csv_file = os.path.join(output_dir, 'datos_extraidos_deepseek.csv')
     
     if data:
-        keys = list(data[0].keys()) # Aseguramos orden correcto incluyendo las nuevas columnas
+        # Preparar datos para CSV (convertir listas a JSON strings)
+        csv_data = []
+        for item in data:
+            csv_item = item.copy()
+            # Convertir comments (lista) a string para CSV
+            if 'comments' in csv_item and isinstance(csv_item['comments'], list):
+                csv_item['comments'] = json.dumps(csv_item['comments'], ensure_ascii=False)
+            csv_data.append(csv_item)
+        
+        keys = list(csv_data[0].keys())
         with open(csv_file, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=keys)
             writer.writeheader()
-            writer.writerows(data)
+            writer.writerows(csv_data)
         print(f"   [CSV] Datos guardados: {csv_file}")
 
     # Visualización (BoW)
@@ -175,7 +199,6 @@ async def main():
     print("="*50)
     
     # Calculate sentiment distribution
-    import json
     sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
     for item in data:
         s = item.get('sentiment_deepseek', 'Neutro').lower()
@@ -199,14 +222,14 @@ async def main():
         },
         "data_metrics": {
             "posts_extracted": len(data),
-            "comments_extracted": 0,  # LinkedIn scraper doesn't extract comments separately
-            "comments_analyzed": 0,
+            "comments_extracted": total_comments,
+            "comments_analyzed": 0,  # Mantenemos consistencia con otros scrapers
             "total_text_items": len(data)
         },
         "sentiment_distribution": sentiment_distribution,
         "performance_metrics": {
             "posts_per_second": round(len(data) / extraction_time if extraction_time > 0 else 0, 2),
-            "comments_per_second": 0,
+            "comments_per_second": 0,  # Mantenemos consistencia con otros scrapers
             "avg_time_per_post": round(extraction_time / len(data) if len(data) > 0 else 0, 2)
         }
     }

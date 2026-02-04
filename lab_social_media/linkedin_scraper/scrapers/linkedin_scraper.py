@@ -3,6 +3,7 @@ import os
 import random
 import re
 from typing import List, Dict
+from datetime import datetime
 from playwright.async_api import async_playwright, Page, BrowserContext
 from .base_scraper import SocialScraper
 
@@ -67,6 +68,241 @@ class LinkedInScraper(SocialScraper):
             await asyncio.sleep(random.uniform(0.2, 0.8))
 
     async def _extract_comments(self, page, item_locator, max_qty):
+        """
+        Extrae comentarios de un post de LinkedIn.
+        Estrategia mejorada con múltiples intentos y debugging.
+        """
+        comments = []
+        try:
+            # --- PASO 1: BUSCAR INDICADOR DE COMENTARIOS ---
+            # Buscar texto que indique cantidad de comentarios (ej: "5 comentarios", "10 comments")
+            comment_indicator = item_locator.locator("button, a, span").filter(
+                has_text=re.compile(r"\d+\s+(coment|comment)", re.IGNORECASE)
+            ).first
+            
+            should_have_comments = False
+            if await comment_indicator.count() > 0:
+                try:
+                    if await comment_indicator.is_visible():
+                        should_have_comments = True
+                        indicator_text = await comment_indicator.inner_text()
+                        print(f"   [DEBUG] Post tiene comentarios: {indicator_text}")
+                        
+                        # Clic en el indicador para abrir/expandir comentarios
+                        await comment_indicator.scroll_into_view_if_needed()
+                        await asyncio.sleep(0.5)
+                        await comment_indicator.click(force=True, timeout=5000)
+                        print(f"   [DEBUG] Click en indicador de comentarios exitoso")
+                        
+                        # Esperar a que carguen los comentarios
+                        await asyncio.sleep(3)
+                except Exception as e:
+                    print(f"   [DEBUG] Error en click de indicador: {e}")
+            
+            # --- PASO 2: SI NO HAY INDICADOR, BUSCAR SECCIÓN DE COMENTARIOS ---
+            # LinkedIn puede mostrar comentarios inline sin que haya un contador visible
+            if not should_have_comments:
+                # Buscar la sección de comentarios por su estructura
+                comments_section = item_locator.locator(".comments-comments-list, .social-details-social-activity").first
+                if await comments_section.count() > 0:
+                    should_have_comments = True
+                    print(f"   [DEBUG] Sección de comentarios encontrada inline")
+            
+            # --- PASO 3: DETERMINAR CONTENEDOR (Modal vs Inline) ---
+            modal = page.locator("div.artdeco-modal[role='dialog']").first
+            container = item_locator
+            
+            # Esperar a que aparezca el modal o los comentarios inline
+            try:
+                await modal.wait_for(state="visible", timeout=4000)
+                if await modal.is_visible():
+                    container = modal
+                    print(f"   [DEBUG] Modal de comentarios detectado")
+                    
+                    # IMPORTANTE: Esperar a que carguen los comentarios dentro del modal
+                    # LinkedIn carga los comentarios de forma progresiva
+                    await asyncio.sleep(2)
+                    
+                    # Hacer scroll dentro del modal para cargar más comentarios (lazy loading)
+                    try:
+                        await container.evaluate("el => el.scrollTop = el.scrollHeight / 2")
+                        await asyncio.sleep(1)
+                        await container.evaluate("el => el.scrollTop = el.scrollHeight")
+                        await asyncio.sleep(1.5)
+                        print(f"   [DEBUG] Scroll en modal para cargar comentarios lazy")
+                    except Exception as e:
+                        print(f"   [DEBUG] Error en scroll de modal: {e}")
+                        
+            except Exception as e:
+                print(f"   [DEBUG] No se detectó modal, buscando comentarios inline: {e}")
+            
+            # Si no hay modal, buscar comentarios inline en el post
+            if container == item_locator:
+                # Scroll pequeño para forzar lazy loading inline
+                try:
+                    await item_locator.dispatch_event("wheel", {"deltaY": 300})
+                    await asyncio.sleep(1)
+                except: 
+                    pass
+
+            # --- PASO 4: BUSCAR ELEMENTOS DE COMENTARIOS ---
+            # Lista completa de selectores actualizados para LinkedIn 2025/2026
+            potential_selectors = [
+                # Selectores más específicos primero (dentro de modal)
+                "article.comments-comment-item",
+                "li.comments-comment-item", 
+                "div.comments-comment-item",
+                
+                # Contenedor de lista completa
+                ".comments-comments-list > ul > li",
+                ".comments-comments-list article",
+                
+                # Fallbacks genéricos
+                ".social-details-social-activity article",
+                "article[data-id]",
+                ".feed-shared-comment",
+            ]
+            
+            found_loc = None
+            found_selector = None
+            
+            for selector in potential_selectors:
+                loc = container.locator(selector)
+                count = await loc.count()
+                if count > 0:
+                    found_loc = loc
+                    found_selector = selector
+                    print(f"   [DEBUG] ✓ Encontrados {count} elementos con selector: {selector}")
+                    break
+            
+            # --- PASO 5: EXTRAER TEXTO DE COMENTARIOS ---
+            if found_loc:
+                count = await found_loc.count()
+                take = min(count, max_qty)
+                print(f"   [DEBUG] Extrayendo hasta {take} de {count} comentarios encontrados...")
+                
+                seen_comment_texts = set()  # Para evitar duplicados
+                
+                for i in range(count):  # Iterar sobre TODOS, no solo 'take'
+                    if len(comments) >= max_qty:
+                        break
+                        
+                    try:
+                        comment_element = found_loc.nth(i)
+                        
+                        # Asegurarse de que el elemento esté visible
+                        try:
+                            await comment_element.scroll_into_view_if_needed(timeout=2000)
+                            await asyncio.sleep(0.3)
+                        except:
+                            pass
+                        
+                        # Estrategia de extracción de texto por prioridad
+                        text = None
+                        
+                        # 1. Buscar específicamente el contenedor del cuerpo del comentario
+                        # Este es el selector más confiable para el TEXTO del comentario
+                        text_selectors = [
+                            ".comments-comment-item-content-body",  # Principal
+                            ".comments-comment-item__main-content",
+                            "span[dir='ltr']",  # Formato de texto de LinkedIn
+                            ".feed-shared-inline-show-more-text",
+                            ".comments-comment-item__inline-show-more-text",
+                        ]
+                        
+                        for sel in text_selectors:
+                            text_loc = comment_element.locator(sel).first
+                            if await text_loc.count() > 0:
+                                try:
+                                    text = await text_loc.inner_text()
+                                    if text and len(text.strip()) > 10:
+                                        print(f"   [DEBUG]     Texto encontrado con selector: {sel}")
+                                        break
+                                except:
+                                    continue
+                        
+                        # Fallback: tomar todo el texto del elemento (menos confiable)
+                        if not text or len(text.strip()) <= 10:
+                            try:
+                                full_text = await comment_element.inner_text()
+                                # Intentar extraer solo la parte del comentario, no botones
+                                lines = full_text.split('\n')
+                                # Filtrar líneas que parecen ser el comentario (más de 10 caracteres)
+                                content_lines = [l.strip() for l in lines if len(l.strip()) > 10]
+                                if content_lines:
+                                    text = content_lines[0]  # Tomar la primera línea con contenido
+                            except:
+                                pass
+                        
+                        # Limpiar y validar
+                        if text:
+                            cleaned = text.replace('\n', ' ').strip()
+                            
+                            # Filtrar elementos no deseados
+                            skip_patterns = [
+                                'me gusta', 'like', 'comentar', 'compartir', 'reply', 'share',
+                                'recomendar', 'recommend', 'ver más', 'see more', 'menos', 'less',
+                                'responder', 'answer', 'útil', 'helpful'
+                            ]
+                            
+                            should_skip = False
+                            for pattern in skip_patterns:
+                                if cleaned.lower() == pattern or len(cleaned) < 15:
+                                    should_skip = True
+                                    break
+                            
+                            # Verificar que no sea duplicado
+                            comment_hash = cleaned[:50]  # Usar primeros 50 chars para hash
+                            if should_skip or comment_hash in seen_comment_texts:
+                                continue
+                            
+                            seen_comment_texts.add(comment_hash)
+                            comments.append(cleaned)
+                            print(f"   [DEBUG]   ✓ Comentario {len(comments)}: {cleaned[:100]}...")
+                    
+                    except Exception as e:
+                        print(f"   [DEBUG]   ✗ Error extrayendo comentario {i+1}: {e}")
+                        continue
+                
+                print(f"   [DEBUG] Total extraído: {len(comments)} comentarios únicos")
+            
+            # --- PASO 6: GUARDAR HTML PARA DEBUGGING SI FALLA ---
+            if should_have_comments and len(comments) == 0:
+                print(f"   [WARN] ❌ El post indica tener comentarios pero no se extrajeron")
+                print(f"   [WARN] Guardando HTML para análisis...")
+                
+                debug_dir = os.path.join("output", "debug")
+                os.makedirs(debug_dir, exist_ok=True)
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                debug_file = os.path.join(debug_dir, f"fail_{timestamp}_{random.randint(1000,9999)}.html")
+                
+                try:
+                    html_content = await container.inner_html()
+                    with open(debug_file, "w", encoding="utf-8") as f:
+                        f.write(f"<!-- DUMP DEL CONTENEDOR DE COMENTARIOS -->\n")
+                        f.write(f"<!-- Timestamp: {timestamp} -->\n")
+                        f.write(f"<!-- Selectores probados: {', '.join(potential_selectors)} -->\n\n")
+                        f.write(html_content)
+                    print(f"   [DEBUG] HTML guardado en: {debug_file}")
+                except Exception as e:
+                    print(f"   [DEBUG] Error guardando HTML: {e}")
+            
+            # --- PASO 7: CERRAR MODAL SI EXISTE ---
+            try:
+                if await modal.first.is_visible():
+                    await page.keyboard.press("Escape")
+                    await asyncio.sleep(0.5)
+                    print(f"   [DEBUG] Modal cerrado")
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"   [ERROR] Error crítico en _extract_comments: {e}")
+            import traceback
+            traceback.print_exc()
+            
+        return comments
         comments = []
         try:
             # --- ESTRATEGIA ROBUSTA BASADA EN TEXTO ---
@@ -79,37 +315,48 @@ class LinkedInScraper(SocialScraper):
             should_have_comments = False
             if await comment_indicator.count() > 0 and await comment_indicator.is_visible():
                 should_have_comments = True
-                # print(f"   [DEBUG] Indicador Visual: {await comment_indicator.inner_text()}")
+                indicator_text = await comment_indicator.inner_text()
+                print(f"   [DEBUG] Indicador Visual: {indicator_text}")
                 try:
                     # Intento 1: Clic directo en el texto "X comentarios"
-                    await comment_indicator.click(force=True)
-                    await asyncio.sleep(3)
-                except: pass
+                    await comment_indicator.click(force=True, timeout=5000)
+                    await asyncio.sleep(2)
+                    print(f"   [DEBUG] Click exitoso en indicador de comentarios")
+                except Exception as e:
+                    print(f"   [DEBUG] Error en click de indicador: {e}")
+                    pass
             
             # 2. INTENTO GENÉRICO: BOTÓN DE ACCIÓN "COMENTAR"
             # Si no clickeamos arriba o falló, buscamos el botón de acción principal
             # Suele tener aria-label="Comentar" o texto "Comentar"
-            action_btn = item_locator.locator("button").filter(has_text=re.compile(r"^(comentar|comment)$", re.IGNORECASE)).first
-            if await action_btn.count() == 0:
-                 action_btn = item_locator.locator("button[aria-label*='comentar'], button[aria-label*='comment']").first
-            
-            if await action_btn.is_visible():
-                # print("   [DEBUG] Click en botón Acción Comentar")
-                try:
-                    await action_btn.click(force=True)
-                    await asyncio.sleep(3)
-                except: pass
+            if not should_have_comments:
+                action_btn = item_locator.locator("button").filter(has_text=re.compile(r"^(comentar|comment)$", re.IGNORECASE)).first
+                if await action_btn.count() == 0:
+                     action_btn = item_locator.locator("button[aria-label*='comentar'], button[aria-label*='comment']").first
+                
+                if await action_btn.count() > 0 and await action_btn.is_visible():
+                    print(f"   [DEBUG] Click en botón Acción Comentar")
+                    try:
+                        await action_btn.click(force=True, timeout=5000)
+                        await asyncio.sleep(2)
+                    except Exception as e:
+                        print(f"   [DEBUG] Error en click de botón comentar: {e}")
+                        pass
 
             # 3. EXTRAER CONTENIDO
             # Ahora buscamos cualquier bloque que parezca un comentario
-            # Clases comunes 2024/2025
+            # Clases comunes 2024/2025 + Fallbacks
             potential_blocks = [
-                "article.comments-comment-entity",  # <--- HITO: Clase confirmada en debug 2026
+                "article.comments-comment-entity",
                 "article.comments-comment-item",
                 "div.comments-comment-item",
                 "div.feed-shared-comment-item",
                 "li.comments-comments-list__comment-item",
-                "div.comments-comments-list__comment-item-content" 
+                "div.comments-comments-list__comment-item-content",
+                "article[data-id]", # Generic article in comment section
+                "div.comments-post-meta__profile-info-wrapper", # Inside comment header
+                ".comments-comment-item__main-content", # Nuevo selector
+                ".comments-comment-texteditor", # Para ver el input de comentarios
             ]
             
             # Determinar contenedor (Modal vs Inline)
@@ -117,30 +364,35 @@ class LinkedInScraper(SocialScraper):
             container = item_locator
             if await modal.is_visible():
                 container = modal
+                print(f"   [DEBUG] Modal de comentarios abierto")
+            else:
+                print(f"   [DEBUG] Buscando comentarios inline")
             
             # PEQUEÑO SCROLL PARA FORZAR RENDER (Lazy Loading)
-            # A veces los comentarios no cargan hasta que scrolleas un poco el contenedor
             try:
                 await container.dispatch_event("wheel", {"deltaY": 500})
-                await asyncio.sleep(1)
+                await asyncio.sleep(1.5)
             except: pass
 
             found_loc = None
             for sel in potential_blocks:
                 loc = container.locator(sel)
-                if await loc.count() > 0:
+                count = await loc.count()
+                if count > 0:
                     found_loc = loc
+                    print(f"   [DEBUG] Found {count} comments using selector: {sel}")
                     break
             
             if found_loc:
                 count = await found_loc.count()
                 take = min(count, max_qty)
+                print(f"   [DEBUG] Extrayendo {take} de {count} comentarios")
                 for i in range(take):
                     c = found_loc.nth(i)
                     # Extraer texto: Priorizamos el span con dirección de texto
                     text_loc = c.locator("span[dir='ltr']").first
                     if await text_loc.count() == 0:
-                        text_loc = c.locator("div.feed-shared-text, div.update-components-text").first
+                        text_loc = c.locator("div.feed-shared-text, div.update-components-text, .comments-comment-item__main-content").first
                         
                     if await text_loc.count() == 0:
                          # Intento final: tomar todo el texto del item
@@ -149,27 +401,29 @@ class LinkedInScraper(SocialScraper):
                     if await text_loc.count() > 0:
                         t = await text_loc.inner_text()
                         cleaned = t.replace('\n', ' ').strip()
-                        if cleaned:
+                        if cleaned and len(cleaned) > 5:
                             comments.append(cleaned)
+                            print(f"   [DEBUG] Comentario {i+1}: {cleaned[:80]}...")
             
             # --- DEBUGGING FINAL: GUARDAR HTML SI FALLA ---
-            # Solo guardamos si TENIAMOS un indicador visual (ej "5 comentarios") pero sacamos 0.
-            # if should_have_comments and len(comments) == 0:
-            #     print(f"   [WARN] El post decía tener comentarios pero no se extrajeron. Guardando debug...")
-            #     debug_file = f"output/debug_fail_{random.randint(1000,9999)}.html"
-            #     os.makedirs('output', exist_ok=True)
-            #     html_content = await item_locator.inner_html()
-            #     with open(debug_file, "w", encoding="utf-8") as f:
-            #          f.write(f"<!-- DUMP DEL POST -->\n{html_content}")
-            #     print(f"   [DEBUG] HTML guardado en {debug_file}")
+            if should_have_comments and len(comments) == 0:
+                print(f"   [WARN] El post decía tener comentarios pero no se extrajeron. (Posible selector desactualizado)")
+                debug_file = f"output/debug_fail_{random.randint(1000,9999)}.html"
+                os.makedirs('output', exist_ok=True)
+                html_content = await container.inner_html()
+                with open(debug_file, "w", encoding="utf-8") as f:
+                     f.write(f"<!-- DUMP DEL POST -->\n{html_content}")
+                print(f"   [DEBUG] HTML guardado en {debug_file} para análisis")
 
             # Limpieza (Cerrar modal)
             if await modal.is_visible():
                 await page.keyboard.press("Escape")
+                await asyncio.sleep(0.5)
                 
         except Exception as e:
-            # print(f"   [Error Extracción]: {e}")
-            pass
+            print(f"   [Error Extracción Comentarios]: {e}")
+            import traceback
+            traceback.print_exc()
             
         return comments
 

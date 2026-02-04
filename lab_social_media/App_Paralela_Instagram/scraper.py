@@ -323,7 +323,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             total_comments_analyzed = 0
             
             try:
-                print("\n--- Starting Sentiment Analysis (Hugging Face - FREE) ---")
+                print("\n--- Starting Sentiment Analysis (DeepSeek) ---")
                 import sentiment_prep
                 import sentiment_analyzer_hf as sentiment_analyzer
                 
@@ -342,7 +342,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
                     sentiment_prep.generate_llm_prompts_csv_instagram(df_sentiment, prompts_path)
                     
                     # Run sentiment analysis with Hugging Face (FREE!)
-                    print("\nAnalyzing sentiment with Hugging Face (100% FREE)...")
+                    print("\nAnalyzing sentiment with DeepSeek...")
                     sentiment_results_path = os.path.join(output_dir, f"sentiment_results_{search_query}.csv")
                     df_results = sentiment_analyzer.main_sentiment_analysis_instagram(
                         input_csv=sentiment_input_path,
@@ -392,7 +392,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
             print(f"   (Avg per post:       {scraping_duration/len(posts_data) if len(posts_data) else 0:.2f}s)")
             print(f"2. Text Processing:     {text_processing_duration:.2f} seconds")
-            print(f"3. Sentiment Analysis:  {sentiment_duration:.2f} seconds (Hugging Face)")
+            print(f"3. Sentiment Analysis:  {sentiment_duration:.2f} seconds (DeepSeek)")
             print(f"   (Avg per comment:    {sentiment_duration/total_comments_analyzed if total_comments_analyzed else 0:.2f}s)")
             print("-" * 50)
             print(f"TOTAL EXECUTION TIME:   {total_duration:.2f} seconds")
@@ -401,7 +401,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             # Generate metrics JSON for master scraper
             metrics = {
                 "social_network": "Instagram",
-                "llm_used": "Hugging Face",
+                "llm_used": "DeepSeek",
                 "query": search_query,
                 "execution_times": {
                     "scraping": round(scraping_duration, 2),

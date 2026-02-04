@@ -678,7 +678,7 @@ def run():
             print("-" * 50)
             print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
             print(f"   (Avg per post:       {scraping_duration/len(datos_nuevos) if len(datos_nuevos) else 0:.2f}s)")
-            print(f"2. Sentiment Analysis:  {sentiment_duration:.2f} seconds (Ollama)")
+            print(f"2. Sentiment Analysis:  {sentiment_duration:.2f} seconds (DeepSeek)")
             print(f"   (Avg per comment:    {sentiment_duration/len(all_comments_texts) if all_comments_texts else 0:.2f}s)")
             print(f"3. Text Processing:     {text_processing_duration:.2f} seconds")
             print("-" * 50)
@@ -688,7 +688,7 @@ def run():
             # Generate metrics JSON for master scraper
             metrics = {
                 "social_network": "Facebook",
-                "llm_used": "Ollama",
+                "llm_used": "DeepSeek",
                 "query": search_query,
                 "execution_times": {
                     "scraping": round(scraping_duration, 2),
