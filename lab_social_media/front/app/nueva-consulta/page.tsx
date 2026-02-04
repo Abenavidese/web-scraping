@@ -83,6 +83,13 @@ export default function NuevaConsultaPage() {
   const estimatedWords = selectedNetworks.length * maxResults[0] * 12 // ~12 words per comment average
   const isOverBudget = currentUserPlan.wordsUsed + estimatedWords > currentUserPlan.wordsLimit
 
+  // DeepSeek pricing calculation
+  // Input: $0.14 per 1M tokens, Output: $0.28 per 1M tokens
+  // Assuming ~1.3 tokens per word (average for English/Spanish)
+  const estimatedInputTokens = estimatedWords * 1.3
+  const estimatedOutputTokens = estimatedWords * 0.3 // Output is ~30% of input for sentiment analysis
+  const estimatedCost = (estimatedInputTokens / 1_000_000 * 0.14) + (estimatedOutputTokens / 1_000_000 * 0.28)
+
   const toggleNetwork = (networkId: SocialNetwork) => {
     setSelectedNetworks(prev =>
       prev.includes(networkId)
@@ -198,73 +205,6 @@ export default function NuevaConsultaPage() {
                   </p>
                 </div>
 
-                {/* Date Range */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="date-from" className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Fecha desde
-                    </Label>
-                    <Input
-                      id="date-from"
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date-to" className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Fecha hasta
-                    </Label>
-                    <Input
-                      id="date-to"
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Language & Country */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Languages className="h-4 w-4" />
-                      Idioma
-                    </Label>
-                    <Select value={language} onValueChange={setLanguage}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ES">Espanol</SelectItem>
-                        <SelectItem value="EN">English</SelectItem>
-                        <SelectItem value="AUTO">Auto-detectar</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Globe className="h-4 w-4" />
-                      Pais/Region
-                    </Label>
-                    <Select value={country} onValueChange={setCountry}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="global">Global</SelectItem>
-                        <SelectItem value="es">Espana</SelectItem>
-                        <SelectItem value="mx">Mexico</SelectItem>
-                        <SelectItem value="ar">Argentina</SelectItem>
-                        <SelectItem value="co">Colombia</SelectItem>
-                        <SelectItem value="us">Estados Unidos</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
                 {/* Max Results Slider */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -347,36 +287,7 @@ export default function NuevaConsultaPage() {
                   </div>
                 </div>
 
-                {/* Cleaning Level */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label>Nivel de limpieza</Label>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <span className="text-xs text-muted-foreground cursor-help underline">
-                          Que es esto?
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>
-                          El preprocesamiento NLP incluye tokenizacion, eliminacion de stopwords
-                          y stemming/lematizacion. Niveles mas agresivos eliminan mas ruido
-                          pero pueden perder contexto.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <Select value={cleaningLevel} onValueChange={setCleaningLevel}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="basico">Basico - Solo limpieza de caracteres</SelectItem>
-                      <SelectItem value="normal">Normal - Stopwords + tokenizacion</SelectItem>
-                      <SelectItem value="agresivo">Agresivo - Stemming completo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
               </CardContent>
             </Card>
 
@@ -449,6 +360,12 @@ export default function NuevaConsultaPage() {
                     <span className="font-medium">{estimatedWords.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Costo estimado</span>
+                    <span className="font-medium text-primary">
+                      ${estimatedCost < 0.01 ? '<0.01' : estimatedCost.toFixed(2)} USD
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Cupo disponible</span>
                     <span className="font-medium">
                       {(currentUserPlan.wordsLimit - currentUserPlan.wordsUsed).toLocaleString()}
@@ -492,7 +409,7 @@ export default function NuevaConsultaPage() {
                   Ejecutar analisis
                 </Button>
                 <p className="text-xs text-muted-foreground text-center mt-3">
-                  {selectedNetworks.length} redes · ~{Math.ceil(selectedNetworks.length * 3)}s estimado
+                  {selectedNetworks.length} {selectedNetworks.length === 1 ? 'red' : 'redes'} seleccionadas
                 </p>
               </CardContent>
             </Card>

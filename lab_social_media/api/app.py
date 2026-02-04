@@ -209,10 +209,27 @@ def get_sentiments():
                 summary[net][mapped_sentiment] += count
             summary[net]['total'] += count
         
+        # Calculate global sentiment totals
+        global_sentiment = {
+            'positive': 0,
+            'negative': 0,
+            'neutral': 0,
+            'mixed': 0,
+            'total': 0
+        }
+        
+        for net_data in summary.values():
+            global_sentiment['positive'] += net_data['positive']
+            global_sentiment['negative'] += net_data['negative']
+            global_sentiment['neutral'] += net_data['neutral']
+            global_sentiment['mixed'] += net_data['mixed']
+            global_sentiment['total'] += net_data['total']
+        
         return jsonify({
             'success': True,
             'distribution': distribution,
-            'summary': summary
+            'summary': summary,
+            'global': global_sentiment
         })
     
     except Exception as e:
@@ -247,56 +264,6 @@ def get_analytics():
         return jsonify({
             'success': True,
             'analytics': analytics
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/queries', methods=['GET'])
-def get_queries():
-    """
-    Get all tracked search queries.
-    
-    Example:
-        GET /api/queries
-    """
-    try:
-        user_id = request.args.get('user_id')
-        df = unifier.get_queries(user_id)
-        
-        queries = df.to_dict('records')
-        
-        return jsonify({
-            'success': True,
-            'queries': queries
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    """
-    Get overall database statistics.
-    
-    Example:
-        GET /api/stats
-    """
-    try:
-        user_id = request.args.get('user_id')
-        stats = unifier.get_stats(user_id)
-        
-        return jsonify({
-            'success': True,
-            'stats': stats
         })
     
     except Exception as e:
@@ -491,9 +458,122 @@ def run_scrapers():
         }), 500
 
 
-# ============================================================================
-# ERROR HANDLERS
-# ============================================================================
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """
+    Get global statistics for a user.
+    
+    Query params:
+        user_id: User ID to get stats for
+    
+    Returns:
+        {
+            "total_posts": int,
+            "total_comments": int,
+            "total_words": int,
+            "networks_used": [str]
+        }
+    """
+    user_id = request.args.get('user_id', 'default')
+    
+    try:
+        cursor = unifier.conn.cursor()
+        
+        # Get total posts
+        cursor.execute("""
+            SELECT COUNT(*) FROM posts WHERE user_id = ?
+        """, (user_id,))
+        total_posts = cursor.fetchone()[0]
+        
+        # Get total comments
+        cursor.execute("""
+            SELECT COUNT(*) FROM comments WHERE user_id = ?
+        """, (user_id,))
+        total_comments = cursor.fetchone()[0]
+        
+        # Get total words (approximate from text length)
+        cursor.execute("""
+            SELECT SUM(LENGTH(text) - LENGTH(REPLACE(text, ' ', '')) + 1) 
+            FROM posts WHERE user_id = ? AND text IS NOT NULL
+        """, (user_id,))
+        result = cursor.fetchone()[0]
+        total_words = result if result else 0
+        
+        # Get networks used
+        cursor.execute("""
+            SELECT DISTINCT network FROM posts WHERE user_id = ?
+        """, (user_id,))
+        networks_used = [row[0] for row in cursor.fetchall()]
+        
+        return jsonify({
+            "total_posts": total_posts,
+            "total_comments": total_comments,
+            "total_words": total_words,
+            "networks_used": networks_used
+        })
+    
+    except Exception as e:
+        app.logger.error(f"Error in /api/stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/queries', methods=['GET'])
+def get_queries():
+    """
+    Get query history for a user.
+    
+    Query params:
+        user_id: User ID to get queries for
+    
+    Returns:
+        {
+            "queries": [
+                {
+                    "id": int,
+                    "query_text": str,
+                    "network": str,
+                    "created_at": str,
+                    "status": str
+                }
+            ]
+        }
+    """
+    user_id = request.args.get('user_id', 'default')
+    
+    try:
+        cursor = unifier.conn.cursor()
+        
+        # Get unique queries from posts
+        cursor.execute("""
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY MIN(COALESCE(created_at, datetime('now'))) DESC) as id,
+                query,
+                network,
+                COALESCE(MIN(created_at), datetime('now')) as created_at,
+                'completed' as status
+            FROM posts 
+            WHERE user_id = ? AND query IS NOT NULL
+            GROUP BY query, network
+            ORDER BY created_at DESC
+            LIMIT 10
+        """, (user_id,))
+        
+        queries = []
+        for row in cursor.fetchall():
+            queries.append({
+                "id": row[0],
+                "query_text": row[1],
+                "network": row[2],
+                "created_at": row[3],
+                "status": row[4]
+            })
+        
+        return jsonify({"queries": queries})
+    
+    except Exception as e:
+        app.logger.error(f"Error in /api/queries: {e}")
+        return jsonify({"error": str(e), "queries": []}), 500
+
 
 @app.errorhandler(404)
 def not_found(error):
@@ -509,6 +589,101 @@ def internal_error(error):
         'success': False,
         'error': 'Internal server error'
     }), 500
+
+
+@app.route('/api/download-csv', methods=['POST'])
+def download_csv():
+    """
+    Generate and download cleaned CSV based on user's latest data.
+    
+    Request:
+    {
+        "user_id": "uuid",
+        "cleaning_level": "basico|normal|agresivo",
+        "network": "all|instagram|x|facebook|linkedin"  # optional, default: all
+    }
+    
+    Response:
+    CSV file download
+    """
+    try:
+        from flask import send_file
+        from shared.data_cleaner import DataCleaner
+        import io
+        
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        user_id = data.get('user_id', 'default')
+        cleaning_level = data.get('cleaning_level', 'normal')
+        network_filter = data.get('network', 'all')
+        
+        # Validate cleaning level
+        if cleaning_level not in ['basico', 'normal', 'agresivo']:
+            return jsonify({'error': 'Invalid cleaning level. Use: basico, normal, or agresivo'}), 400
+        
+        # Get data from database
+        query = """
+            SELECT 
+                p.network,
+                p.post_id,
+                p.url,
+                p.text as post_content,
+                p.sentiment,
+                p.sentiment_score,
+                p.created_at as timestamp,
+                COUNT(c.id) as comments_count
+            FROM posts p
+            LEFT JOIN comments c ON p.id = c.post_id
+            WHERE p.user_id = ?
+        """
+        
+        params = [user_id]
+        
+        if network_filter != 'all':
+            query += " AND p.network = ?"
+            params.append(network_filter)
+        
+        query += " GROUP BY p.id ORDER BY p.created_at DESC"
+        
+        df = pd.read_sql_query(query, unifier.conn, params=params)
+        
+        if df.empty:
+            return jsonify({'error': 'No data found for this user'}), 404
+        
+        # Apply cleaning
+        cleaner = DataCleaner()
+        df_cleaned = cleaner.process_dataframe(
+            df, 
+            level=cleaning_level,
+            text_columns=['post_content']
+        )
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        df_cleaned.to_csv(output, index=False, encoding='utf-8')
+        output.seek(0)
+        
+        # Convert to bytes for download
+        csv_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+        csv_bytes.seek(0)
+        
+        # Generate filename
+        filename = f"datos_{cleaning_level}_{user_id[:8]}.csv"
+        
+        return send_file(
+            csv_bytes,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        print(f"Download CSV Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/chat-with-data', methods=['POST'])
@@ -535,6 +710,7 @@ def chat_with_data():
     except Exception as e:
         print(f"Chat Error: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 
 # ============================================================================
