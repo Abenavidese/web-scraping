@@ -214,7 +214,7 @@ class DataUnifier:
                         str(row.get('post_id', f"{network}_{_}")),
                         network,
                         str(row.get('post_author', row.get('author', ''))),
-                        str(row.get('post_text', row.get('content', row.get('text', '')))),
+                        str(row.get('post_text', row.get('post_caption', row.get('content', row.get('text', ''))))),
                         str(row.get('post_url', row.get('url', ''))),
                         str(row.get('post_processed', row.get('content', ''))),
                         str(row.get(sentiment_field, 'unknown')),

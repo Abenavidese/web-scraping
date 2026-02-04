@@ -106,15 +106,21 @@ export default function HistorialPage() {
 
     const loadHistory = async () => {
       try {
-        const [queriesData, postsData] = await Promise.all([
+        const [queriesData, postsData, statsData] = await Promise.all([
           api.getQueries(user.id),
-          api.getPosts(user.id)
+          api.getPosts(user.id),
+          api.getStats(user.id)
         ])
 
-        console.log('History data loaded:', { queriesData, postsData })
+        console.log('History data loaded:', { queriesData, postsData, statsData })
 
         setItems(queriesData.queries || [])
         setPosts(postsData.posts || [])
+        
+        // Store total comments from stats for accurate count
+        const commentsCount = statsData.total_comments || 0
+        console.log('Total comments from stats:', commentsCount)
+        
       } catch (error) {
         console.error('Error loading history:', error)
       } finally {
@@ -131,10 +137,10 @@ export default function HistorialPage() {
       p.query === query && p.network === network
     )
     
-    const totalComments = queryPosts.reduce((sum, p) => sum + (p.comments_count || 0), 0)
+    const totalComments = queryPosts.reduce((sum, p) => sum + (p.num_comments || 0), 0)
     const totalWords = queryPosts.reduce((sum, p) => {
       const text = p.text || ''
-      return sum + text.split(/\s+/).length
+      return sum + text.split(/\s+/).filter(w => w.length > 0).length
     }, 0)
     
     // Calculate dominant sentiment
@@ -257,7 +263,7 @@ export default function HistorialPage() {
                     <TableHead>Consulta</TableHead>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Redes</TableHead>
-                    <TableHead>Comentarios</TableHead>
+                    <TableHead>Posts</TableHead>
                     <TableHead>Sentimiento</TableHead>
                     <TableHead>Palabras</TableHead>
                     <TableHead>Estado</TableHead>
@@ -291,7 +297,7 @@ export default function HistorialPage() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{stats.totalComments}</TableCell>
+                        <TableCell>{stats.postsCount}</TableCell>
                         <TableCell>
                           <SentimentBadge sentiment={stats.sentiment} />
                         </TableCell>
@@ -397,8 +403,8 @@ export default function HistorialPage() {
 
                 <div className="grid grid-cols-3 gap-4 p-4 rounded-lg bg-muted">
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{stats.totalComments}</p>
-                    <p className="text-xs text-muted-foreground">Comentarios</p>
+                    <p className="text-2xl font-bold">{stats.postsCount}</p>
+                    <p className="text-xs text-muted-foreground">Posts</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold">{stats.totalWords.toLocaleString()}</p>
