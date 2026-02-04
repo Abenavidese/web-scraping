@@ -128,33 +128,164 @@ export default function NuevaConsultaPage() {
     setAnalysisSteps(initialSteps)
 
     try {
-      // Send request to API
-      const result = await api.scrape({
-        networks: selectedNetworks,
-        query: query,
-        num_posts: maxResults[0],
-        num_comments: includeComments ? 10 : 0, // Default to 10 comments if checked
-        user_id: user.id,
-        limits: isCustomLimits ? networkLimits : undefined
+      // Start scraping and get session ID
+      const response = await fetch('http://localhost:5000/api/scrape/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          networks: selectedNetworks,
+          query: query,
+          num_posts: maxResults[0],
+          num_comments: includeComments ? 10 : 0,
+          user_id: user.id,
+          limits: isCustomLimits ? networkLimits : undefined
+        })
       })
 
-      // On success (the API currently waits for completion, so this blocks until done)
-      // If we want real-time updates we need sockets, but for now we simulate or just valid
+      if (!response.ok) throw new Error('Failed to start scraping')
 
-      setAnalysisSteps(prev => prev.map(s => ({ ...s, status: "done", progress: 100 })))
+      const { session_id } = await response.json()
 
-      toast({
-        title: "Análisis completado",
-        description: `Se han procesado ${result.successful} redes exitosamente.`,
-      })
+      // Connect to SSE stream
+      const eventSource = new EventSource(`http://localhost:5000/api/scrape/events/${session_id}`)
 
-      // Redirect to results
-      await new Promise(resolve => setTimeout(resolve, 800))
-      router.push("/resultados")
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        console.log('SSE Event:', data)
+
+        setAnalysisSteps(prev => {
+          const updated = [...prev]
+
+          switch (data.type) {
+            case 'start':
+              // Mark request as complete and start ALL networks in parallel
+              updated[0].status = "done"
+              updated[0].progress = 100
+              // Mark all network extraction steps as running (parallel execution)
+              updated.forEach((step, idx) => {
+                if (step.id.startsWith('extract-')) {
+                  updated[idx].status = "running"
+                  updated[idx].progress = 5
+                }
+              })
+              break
+
+            case 'launch':
+              // Confirm all networks are running (already set in 'start')
+              break
+
+            case 'network_start':
+              // Update progress for specific network
+              const startIdx = updated.findIndex(s => s.id === `extract-${data.network}`)
+              if (startIdx >= 0) {
+                updated[startIdx].progress = 15
+              }
+              break
+
+            case 'network_complete':
+              // Mark network as done and update next pending step
+              const completeIdx = updated.findIndex(s => s.id === `extract-${data.network}`)
+              if (completeIdx >= 0) {
+                updated[completeIdx].status = data.status === 'success' ? "done" : "error"
+                updated[completeIdx].progress = 100
+              }
+              
+              // Check if all networks are complete to start processing
+              const allNetworksDone = updated
+                .filter(s => s.id.startsWith('extract-'))
+                .every(s => s.status === 'done' || s.status === 'error')
+              
+              if (allNetworksDone) {
+                const processIdx = updated.findIndex(s => s.id === 'processing')
+                if (processIdx >= 0) {
+                  updated[processIdx].status = "running"
+                  updated[processIdx].progress = 10
+                }
+              }
+              break
+
+            case 'import_start':
+              // First import starts processing step if not already started
+              const procStartIdx = updated.findIndex(s => s.id === 'processing')
+              if (procStartIdx >= 0 && updated[procStartIdx].status === 'pending') {
+                updated[procStartIdx].status = "running"
+                updated[procStartIdx].progress = 20
+              }
+              break
+
+            case 'import_done':
+              // Increment processing progress
+              const procIdx = updated.findIndex(s => s.id === 'processing')
+              if (procIdx >= 0 && updated[procIdx].status === 'running') {
+                updated[procIdx].progress = Math.min(updated[procIdx].progress + 20, 90)
+              }
+              break
+
+            case 'complete':
+              // Mark all as done
+              updated.forEach(s => {
+                if (s.status !== 'error') {
+                  s.status = "done"
+                  s.progress = 100
+                }
+              })
+
+              toast({
+                title: "Análisis completado",
+                description: `Se han procesado las redes exitosamente.`,
+              })
+
+              // Close connection and redirect
+              eventSource.close()
+              setTimeout(() => {
+                router.push("/resultados")
+              }, 1000)
+              break
+
+            case 'error':
+              // Mark current as error
+              const runningIdx = updated.findIndex(s => s.status === 'running')
+              if (runningIdx >= 0) {
+                updated[runningIdx].status = "error"
+              }
+
+              toast({
+                title: "Error en el análisis",
+                description: data.error || "Error desconocido",
+                variant: "destructive",
+              })
+
+              eventSource.close()
+              setTimeout(() => setIsAnalyzing(false), 2000)
+              break
+          }
+
+          return updated
+        })
+      }
+
+      eventSource.onerror = (error) => {
+        console.error('SSE Error:', error)
+        eventSource.close()
+        
+        setAnalysisSteps(prev => prev.map(s => 
+          s.status === "running" ? { ...s, status: "error", progress: 0 } : s
+        ))
+        
+        toast({
+          title: "Error de conexión",
+          description: "Se perdió la conexión con el servidor",
+          variant: "destructive",
+        })
+        
+        setTimeout(() => setIsAnalyzing(false), 2000)
+      }
 
     } catch (error) {
       console.error(error)
-      setAnalysisSteps(prev => prev.map(s => ({ ...s, status: "error" })))
+      setAnalysisSteps(prev => prev.map(s => 
+        s.status === "running" ? { ...s, status: "error", progress: 0 } : s
+      ))
       toast({
         title: "Error en el análisis",
         description: error instanceof Error ? error.message : "Error desconocido",
@@ -479,11 +610,6 @@ export default function NuevaConsultaPage() {
                       <Progress value={step.progress} className="h-1 mt-1" />
                     )}
                   </div>
-                  {step.status === "done" && (
-                    <span className="text-xs text-muted-foreground">
-                      {(Math.random() * 2 + 1).toFixed(1)}s
-                    </span>
-                  )}
                 </div>
               ))}
             </div>

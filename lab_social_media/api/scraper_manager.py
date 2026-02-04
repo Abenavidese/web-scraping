@@ -61,7 +61,7 @@ class ScraperManager:
         except Exception:
             return None
     
-    def run_scrapers(self, networks, query, num_posts=10, num_comments=5, user_id='default', limits=None):
+    def run_scrapers(self, networks, query, num_posts=10, num_comments=5, user_id='default', limits=None, session_id=None):
         """
         Run selected scrapers in parallel using subprocess.Popen
         
@@ -72,10 +72,18 @@ class ScraperManager:
             num_comments (int): Number of comments per post
             user_id (str): User ID for data isolation (default: 'default')
             limits (dict): Optional dictionary mapping network keys to post counts (e.g. {'x': 50})
+            session_id (str): Optional session ID for progress tracking
             
         Returns:
             dict: Results from all scrapers
         """
+        # Progress tracking
+        from progress_tracker import progress_tracker
+        
+        def emit_progress(event_type, data):
+            if session_id:
+                progress_tracker.emit(session_id, event_type, data)
+        
         # Validate networks
         valid_networks = [n for n in networks if n in self.scrapers]
         if not valid_networks:
@@ -86,6 +94,7 @@ class ScraperManager:
             }
         
         print(f"🚀 Launching scrapers for: {', '.join(valid_networks)}", flush=True)
+        emit_progress('launch', {'networks': valid_networks})
         
         # Launch all processes immediately
         running_processes = []
@@ -131,6 +140,7 @@ class ScraperManager:
                     'start_time': time.time()
                 })
                 print(f"   ▶️ Started {config['name']} (PID: {process.pid})", flush=True)
+                emit_progress('network_start', {'network': network_key, 'name': config['name'], 'pid': process.pid})
                 
             except Exception as e:
                 print(f"   ❌ Failed to start {config['name']}: {e}", flush=True)
@@ -165,6 +175,9 @@ class ScraperManager:
                 end_time = time.time()
                 execution_time = end_time - start_time
                 returncode = process.returncode
+                
+                # Emit completion event
+                emit_progress('network_complete', {'network': network_key, 'name': name, 'execution_time': execution_time, 'status': 'success' if returncode == 0 else 'error'})
                 
                 # Parse metrics
                 metrics = self._parse_metrics(stdout)

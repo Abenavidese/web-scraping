@@ -4,12 +4,17 @@ REST API for Social Media Analytics
 Provides endpoints to access unified social media data
 """
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 import sys
 import sys
 import os
 import re
+import json
+import time
+import uuid
+from queue import Queue
+from threading import Thread
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -438,11 +443,14 @@ def run_scrapers():
                     
                     sentiment_csv = os.path.join(data_dir, 'sentiment_results.csv')
                     sentiment_csv_alt = os.path.join(data_dir, 'datos_extraidos_deepseek.csv')
+                    sentiment_csv_query = os.path.join(data_dir, f'sentiment_results_{slug}.csv')
                     metrics_json = os.path.join(data_dir, 'metrics.json')
                     
                     # Import
                     if os.path.exists(sentiment_csv):
                          unifier.import_from_csv(network, sentiment_csv, query, user_id)
+                    elif os.path.exists(sentiment_csv_query):
+                         unifier.import_from_csv(network, sentiment_csv_query, query, user_id)
                     elif os.path.exists(sentiment_csv_alt):
                          unifier.import_from_csv(network, sentiment_csv_alt, query, user_id)
                     
@@ -456,6 +464,149 @@ def run_scrapers():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# Global storage for active scraping sessions
+active_sessions = {}
+
+@app.route('/api/scrape/stream', methods=['POST'])
+def run_scrapers_stream():
+    """
+    Execute scrapers with real-time progress streaming via SSE
+    
+    Request Body: Same as /api/scrape
+    
+    Returns: Server-Sent Events stream with progress updates
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No JSON data provided'}), 400
+        
+        networks = data.get('networks', [])
+        query = data.get('query')
+        
+        if not networks or not query:
+            return jsonify({'success': False, 'error': 'networks and query are required'}), 400
+        
+        num_posts = data.get('num_posts', 10)
+        num_comments = data.get('num_comments', 5)
+        user_id = data.get('user_id', 'default')
+        limits = data.get('limits', {})
+        
+        # Generate session ID
+        session_id = str(uuid.uuid4())
+        
+        # Create event queue for this session
+        event_queue = Queue()
+        active_sessions[session_id] = {'queue': event_queue, 'done': False}
+        
+        # Start scraping in background thread
+        def run_scraping():
+            from scraper_manager import ScraperManager
+            from progress_tracker import progress_tracker
+            
+            try:
+                # Emit start event
+                event_queue.put({'type': 'start', 'session_id': session_id, 'query': query, 'networks': networks})
+                
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                manager = ScraperManager(base_dir)
+                
+                # Subscribe to progress
+                def on_progress(event):
+                    event_queue.put(event)
+                
+                progress_tracker.subscribe(session_id, on_progress)
+                
+                # Run scrapers
+                result = manager.run_scrapers(
+                    networks=networks,
+                    query=query,
+                    num_posts=num_posts,
+                    num_comments=num_comments,
+                    user_id=user_id,
+                    limits=limits,
+                    session_id=session_id
+                )
+                
+                # Auto-import
+                if result['success']:
+                    slug = re.sub(r'[^\w\s-]', '', query).strip().replace(' ', '_').lower()
+                    users_dir = os.path.join(base_dir, 'users')
+                    
+                    for scraper_res in result.get('results', []):
+                        if scraper_res.get('status') == 'success':
+                            network = scraper_res['network']
+                            event_queue.put({'type': 'import_start', 'network': network})
+                            
+                            data_dir = os.path.join(users_dir, user_id, network, slug)
+                            sentiment_csv = os.path.join(data_dir, 'sentiment_results.csv')
+                            sentiment_csv_alt = os.path.join(data_dir, 'datos_extraidos_deepseek.csv')
+                            sentiment_csv_query = os.path.join(data_dir, f'sentiment_results_{slug}.csv')
+                            metrics_json = os.path.join(data_dir, 'metrics.json')
+                            
+                            if os.path.exists(sentiment_csv):
+                                unifier.import_from_csv(network, sentiment_csv, query, user_id)
+                            elif os.path.exists(sentiment_csv_query):
+                                unifier.import_from_csv(network, sentiment_csv_query, query, user_id)
+                            elif os.path.exists(sentiment_csv_alt):
+                                unifier.import_from_csv(network, sentiment_csv_alt, query, user_id)
+                            
+                            if os.path.exists(metrics_json):
+                                unifier.import_metrics(network, metrics_json, user_id)
+                            
+                            event_queue.put({'type': 'import_done', 'network': network})
+                
+                event_queue.put({'type': 'complete', 'result': result})
+                
+            except Exception as e:
+                event_queue.put({'type': 'error', 'error': str(e)})
+            finally:
+                active_sessions[session_id]['done'] = True
+                progress_tracker.clear_session(session_id)
+        
+        thread = Thread(target=run_scraping, daemon=True)
+        thread.start()
+        
+        # Return session ID for client to connect to SSE stream
+        return jsonify({'success': True, 'session_id': session_id})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scrape/events/<session_id>')
+def scrape_events(session_id):
+    """
+    SSE endpoint for real-time scraping progress
+    """
+    def event_stream():
+        if session_id not in active_sessions:
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Invalid session'})}\n\n"
+            return
+        
+        session = active_sessions[session_id]
+        event_queue = session['queue']
+        
+        try:
+            while not session['done'] or not event_queue.empty():
+                try:
+                    # Wait for event with timeout
+                    event = event_queue.get(timeout=1)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except:
+                    # Timeout, send heartbeat
+                    yield f": heartbeat\n\n"
+                    
+        finally:
+            # Clean up
+            if session_id in active_sessions:
+                del active_sessions[session_id]
+    
+    return Response(event_stream(), mimetype='text/event-stream',
+                   headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 @app.route('/api/stats', methods=['GET'])
@@ -514,6 +665,101 @@ def get_stats():
     
     except Exception as e:
         app.logger.error(f"Error in /api/stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/latest-results', methods=['GET'])
+def get_latest_results():
+    """
+    Get results from the most recent scraping session (same query, all networks).
+    
+    Query params:
+        user_id: User ID to get results for
+    
+    Returns:
+        {
+            "query": str,
+            "session_date": str,
+            "posts": [{...}],
+            "stats": {...}
+        }
+    """
+    user_id = request.args.get('user_id', 'default')
+    
+    try:
+        cursor = unifier.conn.cursor()
+        
+        # Get the most recent query based on scraped_at
+        cursor.execute("""
+            SELECT query, MAX(scraped_at) as latest
+            FROM posts
+            WHERE user_id = ? AND query IS NOT NULL
+            GROUP BY query
+            ORDER BY latest DESC
+            LIMIT 1
+        """, (user_id,))
+        
+        result = cursor.fetchone()
+        if not result or not result[0]:
+            return jsonify({"query": None, "session_date": None, "posts": [], "stats": {}})
+        
+        latest_query = result[0]
+        latest_scraped = result[1]
+        
+        # Get all posts for this query across all networks
+        cursor.execute("""
+            SELECT id, post_id, network, author, text, url, created_at, 
+                   scraped_at, processed_text, sentiment, sentiment_score, 
+                   sentiment_reasoning, query, num_comments, user_id
+            FROM posts
+            WHERE user_id = ? AND query = ?
+        """, (user_id, latest_query))
+        
+        posts = []
+        for row in cursor.fetchall():
+            posts.append({
+                "id": row[0],
+                "post_id": row[1],
+                "network": row[2],
+                "author": row[3],
+                "text": row[4],
+                "url": row[5],
+                "created_at": row[6],
+                "scraped_at": row[7],
+                "processed_text": row[8],
+                "sentiment": row[9],
+                "sentiment_score": row[10],
+                "sentiment_reasoning": row[11],
+                "query": row[12],
+                "num_comments": row[13],
+                "user_id": row[14]
+            })
+        
+        # Calculate stats
+        stats = {
+            "total_posts": len(posts),
+            "total_comments": sum(int(p["num_comments"] or 0) for p in posts),
+            "networks": list(set(p["network"] for p in posts)),
+            "by_network": {}
+        }
+        
+        # Stats by network
+        for post in posts:
+            net = post["network"]
+            if net not in stats["by_network"]:
+                stats["by_network"][net] = {"posts": 0, "comments": 0}
+            stats["by_network"][net]["posts"] += 1
+            stats["by_network"][net]["comments"] += int(post["num_comments"] or 0)
+        
+        return jsonify({
+            "query": latest_query,
+            "session_date": latest_scraped,
+            "posts": posts,
+            "stats": stats
+        })
+    
+    except Exception as e:
+        app.logger.error(f"Error in /api/latest-results: {e}")
         return jsonify({"error": str(e)}), 500
 
 
