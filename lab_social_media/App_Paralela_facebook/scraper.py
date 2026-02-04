@@ -5,6 +5,17 @@ import random
 import re
 from playwright.sync_api import sync_playwright
 from ollama_sentiment import classify_comments_sentiment
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+def slugify(text):
+    """Convert text to slug format for directory names"""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    return text.strip('_')
 
 def sleep_largo():
     time.sleep(1.4)
@@ -77,9 +88,17 @@ def run():
     print(f"Number of posts: {num_posts_to_scrape}")
     print(f"Comments per post: {num_comments_to_scrape}")
 
-    # Create output directory
-    output_dir = "Resultados"
+    # User system configuration
+    user_id = os.getenv("USER_ID", "default")
+    query_slug = slugify(search_query)
+    
+    # Create output directory with user system structure
+    output_dir = os.path.join("..", "users", user_id, "facebook", query_slug)
     os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"\nUser ID: {user_id}")
+    print(f"Output directory: {output_dir}")
+    
     load_env_file(os.path.join(os.path.dirname(__file__), ".env"))
     gemini_api_key = None
     
@@ -692,7 +711,7 @@ def run():
             }
             
             # Save metrics JSON
-            metrics_filename = os.path.join(output_dir, f"metrics_{search_query}.json")
+            metrics_filename = os.path.join(output_dir, "metrics.json")
             with open(metrics_filename, "w", encoding="utf-8") as f:
                 json.dump(metrics, f, indent=4, ensure_ascii=False)
             print(f"\n📊 Metrics saved to: {metrics_filename}")

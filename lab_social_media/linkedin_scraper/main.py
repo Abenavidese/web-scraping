@@ -5,10 +5,10 @@ import argparse
 import matplotlib.pyplot as plt
 
 # Fix Windows encoding issues for emojis
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+# if sys.platform == 'win32':
+#     import io
+#     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+#     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from scrapers.linkedin_scraper import LinkedInScraper
 from utils.nlp_processor import NLPProcessor
@@ -17,6 +17,18 @@ import config
 import time
 import os
 import csv
+import re
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+def slugify(text):
+    """Convert text to slug format for directory names"""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    return text.strip('_')
 
 async def analyze_post_concurrently(llm_analyzer, clean_text, network="LinkedIn", provider="grok"):
     """Wrapper para análisis LLM asíncrono"""
@@ -35,7 +47,7 @@ async def main():
     if not args.query:
         print("\n--- CONFIGURACIÓN DE BÚSQUEDA ---")
         try:
-            print("(!) Nota: Se usará GROK para el análisis de sentimiento.")
+            print("(!) Nota: Se usará DEEPSEEK para el análisis de sentimiento.")
             user_input = input(f"Ingrese el término a buscar (Default: '{config.DEFAULT_QUERY}'): ")
             args.query = user_input.strip() if user_input.strip() else config.DEFAULT_QUERY
             
@@ -56,6 +68,17 @@ async def main():
     print(f"--- Iniciando Proceso para: '{args.query}' ---")
     print(f"--- Configuración: {args.posts} posts | Max {args.comments} comentarios/post ---")
     
+    # User system configuration
+    user_id = os.getenv("USER_ID", "default")
+    query_slug = slugify(args.query)
+    
+    # Create output directory with user system structure
+    output_dir = os.path.join("..", "users", user_id, "linkedin", query_slug)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"\n🔐 User ID: {user_id}")
+    print(f"📁 Output directory: {output_dir}")
+    
     # Validar Cookie
     if config.LINKEDIN_LI_AT_COOKIE == "PEGAR_TU_COOKIE_LI_AT_AQUI" or len(config.LINKEDIN_LI_AT_COOKIE) < 10:
         print("\n[!] ERROR: No has pegado tu cookie 'li_at' en config.py.")
@@ -75,7 +98,7 @@ async def main():
     extraction_time = time.time() - start_total_time
 
     # 2. Fase de Procesamiento NLP & LLM
-    print("2. Ejecutando Pipeline NLP y Análisis CONCURRENTE con Grok...")
+    print("2. Ejecutando Pipeline NLP y Análisis CONCURRENTE con DeepSeek...")
     nlp_start_time = time.time()
     
     processor = NLPProcessor(language='spanish')
@@ -97,24 +120,23 @@ async def main():
         all_tokens.extend(tokens)
         
         # Preparamos Tarea LLM
-        # Usamos 'grok' forzoso como pidió el usuario
-        llm_tasks.append(analyze_post_concurrently(llm_analyzer, clean_content, "LinkedIn", "grok"))
+        # Usamos 'deepseek' como proveedor centralizado
+        llm_tasks.append(analyze_post_concurrently(llm_analyzer, clean_content, "LinkedIn", "deepseek"))
 
     # Ejecución Concurrente del LLM
-    print(f"   -> Enviando {len(llm_tasks)} peticiones concurrentes a Grok...")
+    print(f"   -> Enviando {len(llm_tasks)} peticiones concurrentes a DeepSeek...")
     llm_results = await asyncio.gather(*llm_tasks)
     
     # Asignar resultados a la data
     for i, (sentiment, explanation) in enumerate(llm_results):
-        data[i]['sentiment_grok'] = sentiment
-        data[i]['explanation_grok'] = explanation
+        data[i]['sentiment_deepseek'] = sentiment
+        data[i]['explanation_deepseek'] = explanation
         print(f"   [{i+1}] Sentimiento: {sentiment} | Exp: {explanation[:50]}...")
 
     # 3. Reporte y Visualización
     print("3. Generando Reporte...")
     
-    os.makedirs('output', exist_ok=True)
-    csv_file = 'output/datos_extraidos_grok.csv'
+    csv_file = os.path.join(output_dir, 'datos_extraidos_deepseek.csv')
     
     if data:
         keys = list(data[0].keys()) # Aseguramos orden correcto incluyendo las nuevas columnas
@@ -134,8 +156,8 @@ async def main():
         plt.xlabel('Palabras')
         plt.ylabel('Frecuencia')
         plt.title(f'Top Palabras - {args.query}')
-        plt.savefig('output/frecuencia_palabras.png')
-        print("   [Gráfico] output/frecuencia_palabras.png")
+        plt.savefig(os.path.join(output_dir, 'frecuencia_palabras.png'))
+        print(f"   [Gráfico] {output_dir}/frecuencia_palabras.png")
     
     total_time = time.time() - start_total_time
     nlp_time = total_time - extraction_time
@@ -147,7 +169,7 @@ async def main():
     print(f"Total Posts Extracted:  {len(data)}")
     print("-" * 50)
     print(f"1. Extraction Phase:    {extraction_time:.2f} seconds")
-    print(f"2. NLP + LLM Analysis:  {nlp_time:.2f} seconds (Grok - Concurrent)")
+    print(f"2. NLP + LLM Analysis:  {nlp_time:.2f} seconds (DeepSeek - Concurrent)")
     print("-" * 50)
     print(f"TOTAL EXECUTION TIME:   {total_time:.2f} seconds")
     print("="*50)
@@ -156,7 +178,7 @@ async def main():
     import json
     sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
     for item in data:
-        s = item.get('sentiment_grok', 'Neutro').lower()
+        s = item.get('sentiment_deepseek', 'Neutro').lower()
         if 'positiv' in s:
             sentiment_distribution["positive"] += 1
         elif 'negativ' in s:
@@ -167,7 +189,7 @@ async def main():
     # Generate metrics JSON for master scraper
     metrics = {
         "social_network": "LinkedIn",
-        "llm_used": "Grok",
+        "llm_used": "DeepSeek",
         "query": args.query,
         "execution_times": {
             "scraping": round(extraction_time, 2),
@@ -190,7 +212,7 @@ async def main():
     }
     
     # Save metrics JSON
-    metrics_filename = f"output/metrics_{args.query}.json"
+    metrics_filename = os.path.join(output_dir, "metrics.json")
     with open(metrics_filename, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=4, ensure_ascii=False)
     print(f"\n📊 Metrics saved to: {metrics_filename}")

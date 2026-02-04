@@ -53,6 +53,15 @@
 └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
         ↓                ↓                ↓                ↓
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│  SENTIMENT   │ │  SENTIMENT   │ │  SENTIMENT   │ │  SENTIMENT   │
+│  ANALYSIS    │ │  ANALYSIS    │ │  ANALYSIS    │ │  ANALYSIS    │
+│              │ │              │ │              │ │              │
+│  DeepSeek    │ │  DeepSeek    │ │  DeepSeek    │ │  DeepSeek    │
+│  API         │ │  API         │ │  API         │ │  API         │
+│  (Central)   │ │  (Central)   │ │  (Central)   │ │  (Central)   │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+        ↓                ↓                ↓                ↓
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │ RESULTADOS   │ │ RESULTADOS   │ │ RESULTADOS   │ │ RESULTADOS   │
 │              │ │              │ │              │ │              │
 │  • CSV       │ │  • JSON      │ │  • JSON      │ │  • CSV       │
@@ -324,6 +333,71 @@ lab_social_media/
 3. **Robustez**: Si un scraper falla, los demás continúan
 4. **Eficiencia**: Aprovecha múltiples núcleos del CPU
 5. **Mantenibilidad**: Código organizado y documentado
+
+## 🧠 Análisis de Sentimientos Centralizado
+
+### Arquitectura de Sentiment Analysis
+
+Todas las redes sociales utilizan un **módulo centralizado** para análisis de sentimientos:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              shared/sentiment_analyzer.py                │
+│                                                          │
+│  DeepSeekSentimentAnalyzer                              │
+│  ├─ analyze_batch()      # Análisis por lotes          │
+│  ├─ analyze_individual() # Análisis individual          │
+│  └─ _parse_response()    # Parseo de resultados        │
+└─────────────────────────────────────────────────────────┘
+                          ↑
+         ┌────────────────┼────────────────┐
+         ↓                ↓                ↓                ↓
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│  X/Twitter   │ │  Instagram   │ │  Facebook    │ │  LinkedIn    │
+│              │ │              │ │              │ │              │
+│  sentiment_  │ │  sentiment_  │ │  ollama_     │ │  llm_        │
+│  analyzer.py │ │  analyzer_   │ │  sentiment.  │ │  processor.  │
+│              │ │  hf.py       │ │  py          │ │  py          │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+```
+
+### Migración de Proveedores LLM
+
+**Antes** (Múltiples proveedores):
+- X/Twitter: OpenAI (GPT-4o-mini)
+- Instagram: Hugging Face (Llama-3.2-3B)
+- Facebook: Ollama local (llama3.2:3b)
+- LinkedIn: Grok (xAI)
+
+**Ahora** (Proveedor único):
+- **Todas las redes**: DeepSeek API (deepseek-chat)
+
+### Configuración
+
+```bash
+# .env (raíz del proyecto)
+DEEPSEEK_API_KEY=your_api_key_here
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+### Formato de Respuesta Estándar
+
+```json
+{
+  "sentiment": "positive|negative|neutral|mixed",
+  "score": 0.85,
+  "reasoning": "El texto expresa satisfacción con el producto..."
+}
+```
+
+### Ventajas de la Centralización
+
+1. **Consistencia**: Mismo modelo para todas las redes
+2. **Mantenibilidad**: Un solo punto de actualización
+3. **Costo-eficiencia**: DeepSeek es más económico que OpenAI
+4. **Simplicidad**: Menos dependencias externas
+5. **Escalabilidad**: Fácil agregar nuevas redes sociales
 
 ---
 

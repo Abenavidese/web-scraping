@@ -6,10 +6,10 @@ import argparse
 import pandas as pd
 
 # Fix Windows encoding issues for emojis
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+# if sys.platform == 'win32':
+#     import io
+#     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+#     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from scraper import XScraper
 from processor import process_data_parallel
@@ -25,6 +25,15 @@ try:
     load_dotenv(dotenv_path=env_path)
 except ImportError:
     print("WARNING: python-dotenv not installed. Environment variables may not load correctly.")
+
+import re
+
+def slugify(text):
+    """Convert text to slug format for directory names"""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    return text.strip('_')
 
 # CONFIGURATION
 # PLEASE UPDATE THESE VALUES OR SET ENVIRONMENT VARIABLES
@@ -60,6 +69,17 @@ async def main():
     print(f"Search topic: {SEARCH_QUERY}")
     print(f"Number of posts: {TWEET_COUNT}")
     print(f"Comments per post: {COMMENT_COUNT}")
+    
+    # User system configuration
+    user_id = os.getenv("USER_ID", "default")
+    query_slug = slugify(SEARCH_QUERY)
+    
+    # Create output directory with user system structure
+    output_dir = os.path.join("..", "users", user_id, "x", query_slug)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"\nUser ID: {user_id}")
+    print(f"Output directory: {output_dir}")
     
     if USERNAME == "YOUR_USERNAME_HERE":
         print("WARNING: Username not set. Please edit main.py or set X_USERNAME env var.")
@@ -119,16 +139,18 @@ async def main():
             })
 
     df_raw = pd.DataFrame(flattened_data)
-    df_raw.to_csv("output/tweets_raw.csv", index=False, encoding='utf-8')
-    print("Raw data saved to output/tweets_raw.csv")
+    tweets_raw_path = os.path.join(output_dir, "tweets_raw.csv")
+    df_raw.to_csv(tweets_raw_path, index=False, encoding='utf-8')
+    print(f"Raw data saved to {tweets_raw_path}")
 
     # 2. Processing (Parallel)
     # We pass the flattened data to processor
     start_processing_time = time.time()
     print("\nStarting Parallel Processing...")
     df_processed = process_data_parallel(flattened_data)
-    df_processed.to_csv("output/tweets_processed.csv", index=False, encoding='utf-8')
-    print("Processed data saved to output/tweets_processed.csv")
+    tweets_processed_path = os.path.join(output_dir, "tweets_processed.csv")
+    df_processed.to_csv(tweets_processed_path, index=False, encoding='utf-8')
+    print(f"Processed data saved to {tweets_processed_path}")
     end_processing_time = time.time()
 
     # 3. Analysis & Visualization
@@ -140,24 +162,25 @@ async def main():
     # Basic Length Filter (Noise removal)
     # df_refined = df_refined[df_refined['processed_text'].str.split().str.len() > 2] # Relaxed filter
     
-    df_refined.to_csv("output/tweets_refined.csv", index=False, encoding='utf-8')
-    print("Refined data (content only) saved to output/tweets_refined.csv")
+    df_refined.to_csv(os.path.join(output_dir, "tweets_refined.csv"), index=False, encoding='utf-8')
+    print(f"Refined data saved to {output_dir}/tweets_refined.csv")
     
     all_text_corpus = ' '.join(df_refined['processed_text'].tolist())
     
-    generate_wordcloud(all_text_corpus, output_path="output/wordcloud.png")
-    plot_top_words(df_processed['processed_tokens'], n=20, output_path="output/frequency_plot.png")
+    generate_wordcloud(all_text_corpus, output_path=os.path.join(output_dir, "wordcloud.png"))
+    plot_top_words(df_processed['processed_tokens'], n=20, output_path=os.path.join(output_dir, "frequency_plot.png"))
     
     # 4. Sentiment Analysis Preparation
     print("\nPreparing Sentiment Analysis Data...")
     from sentiment_prep import prepare_sentiment_data_with_processed, generate_llm_prompts_csv
     
     df_sentiment = prepare_sentiment_data_with_processed(df_processed)
-    df_sentiment.to_csv("output/sentiment_input.csv", index=False, encoding='utf-8')
-    print("Sentiment data saved to output/sentiment_input.csv")
+    sentiment_input_path = os.path.join(output_dir, "sentiment_input.csv")
+    df_sentiment.to_csv(sentiment_input_path, index=False, encoding='utf-8')
+    print(f"Sentiment data saved to {sentiment_input_path}")
     
     # Generate LLM prompts
-    generate_llm_prompts_csv(df_sentiment, output_path="output/llm_prompts.csv")
+    generate_llm_prompts_csv(df_sentiment, output_path=os.path.join(output_dir, "llm_prompts.csv"))
     
     # 5. Sentiment Analysis with OpenAI (Automatic)
     start_sentiment_time = time.time()
@@ -179,8 +202,9 @@ async def main():
             df_results = analyze_batch_openai(client, df_sentiment)
             
             # Guardar resultados
-            df_results.to_csv("output/sentiment_results.csv", index=False, encoding='utf-8')
-            print(f"\n💾 Sentiment results saved to output/sentiment_results.csv")
+            sentiment_results_path = os.path.join(output_dir, "sentiment_results.csv")
+            df_results.to_csv(sentiment_results_path, index=False, encoding='utf-8')
+            print(f"\n💾 Sentiment results saved to {sentiment_results_path}")
             
             # Mostrar resumen
             print("\n📊 Sentiment Summary:")
@@ -266,7 +290,7 @@ async def main():
     
     # Save metrics JSON
     import json
-    metrics_filename = f"output/metrics_{SEARCH_QUERY}.json"
+    metrics_filename = os.path.join(output_dir, "metrics.json")
     with open(metrics_filename, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=4, ensure_ascii=False)
     print(f"\n📊 Metrics saved to: {metrics_filename}")

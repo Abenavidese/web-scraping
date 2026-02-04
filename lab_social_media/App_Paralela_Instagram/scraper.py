@@ -4,7 +4,19 @@ import argparse
 import random
 import time
 import json
+import re
 from playwright.sync_api import sync_playwright
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+def slugify(text):
+    """Convert text to slug format for directory names"""
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    return text.strip('_')
 
 def smart_sleep(min_seconds=0.5, max_seconds=2, probability=0.5):
     """
@@ -56,9 +68,16 @@ def run(search_query=None, num_posts=None, num_comments=None):
     print(f"Number of posts: {num_posts_to_scrape}")
     print(f"Comments per post: {num_comments_to_scrape}")
 
-    # Create output directory
-    output_dir = "Resultados"
+    # User system configuration
+    user_id = os.getenv("USER_ID", "default")
+    query_slug = slugify(search_query)
+    
+    # Create output directory with user system structure
+    output_dir = os.path.join("..", "users", user_id, "instagram", query_slug)
     os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"\nUser ID: {user_id}")
+    print(f"Output directory: {output_dir}")
     
     with sync_playwright() as p:
         # Launch with slow_mo to mimic human speed slightly, using Microsoft Edge
@@ -405,7 +424,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
             }
             
             # Save metrics JSON
-            metrics_filename = os.path.join(output_dir, f"metrics_{search_query}.json")
+            metrics_filename = os.path.join(output_dir, "metrics.json")
             with open(metrics_filename, "w", encoding="utf-8") as f:
                 json.dump(metrics, f, indent=4, ensure_ascii=False)
             print(f"\n📊 Metrics saved to: {metrics_filename}")
