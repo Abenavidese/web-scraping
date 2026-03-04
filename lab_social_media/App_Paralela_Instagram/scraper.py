@@ -352,6 +352,17 @@ def run(search_query=None, num_posts=None, num_comments=None):
                     print(f"\n✅ Sentiment analysis complete!")
                     print(f"Results saved to: {sentiment_results_path}")
                     
+                    # ✅ NUEVO: Generar CSV unificado en formato de investigación
+                    try:
+                        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                        from shared.unified_csv_exporter import convert_instagram_to_unified
+                        
+                        unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
+                        convert_instagram_to_unified(sentiment_results_path, unified_csv_path)
+                        print(f"📋 CSV Unificado (Formato Investigación): {unified_csv_path}")
+                    except Exception as e:
+                        print(f"⚠️  Error generando CSV unificado: {e}")
+                    
                     # Calculate sentiment distribution
                     if df_results is not None and not df_results.empty:
                         total_comments_analyzed = len(df_results)

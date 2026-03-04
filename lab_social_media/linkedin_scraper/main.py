@@ -169,6 +169,17 @@ async def main():
             writer.writeheader()
             writer.writerows(csv_data)
         print(f"   [CSV] Datos guardados: {csv_file}")
+        
+        # ✅ NUEVO: Generar CSV unificado en formato de investigación
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from shared.unified_csv_exporter import convert_linkedin_to_unified
+            
+            unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
+            convert_linkedin_to_unified(csv_file, unified_csv_path)
+            print(f"   [CSV Unificado] Formato Investigación: {unified_csv_path}")
+        except Exception as e:
+            print(f"   ⚠️  Error generando CSV unificado: {e}")
 
     # Visualización (BoW)
     bow = processor.get_bag_of_words(all_tokens)

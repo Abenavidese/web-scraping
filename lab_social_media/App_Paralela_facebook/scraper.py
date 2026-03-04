@@ -657,6 +657,19 @@ def run():
                     writer.writerow([source, title, content, comments_json, sentiment, explanation])
             
             print(f"✅ Saved {len(posts_data)} posts with sentiment to: {posts_csv_name}")
+            
+            # ✅ NUEVO: Generar CSV unificado en formato de investigación
+            try:
+                import sys
+                sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from shared.unified_csv_exporter import convert_facebook_to_unified
+                
+                unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
+                convert_facebook_to_unified(posts_csv_name, unified_csv_path)
+                print(f"📋 CSV Unificado (Formato Investigación): {unified_csv_path}")
+            except Exception as e:
+                print(f"⚠️  Error generando CSV unificado: {e}")
+                
         except Exception as e:
             print(f"❌ Error saving posts CSV: {e}")
         

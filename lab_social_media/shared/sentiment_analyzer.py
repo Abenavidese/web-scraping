@@ -8,6 +8,9 @@ import os
 import sys
 import json
 import time
+import uuid
+import pandas as pd
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # Fix Windows encoding issues for emojis
@@ -35,8 +38,19 @@ except ImportError:
     print("WARNING: openai not installed. Run: pip install openai")
 
 
+from pydantic import BaseModel, Field, ValidationError
+from typing import Literal
+import concurrent.futures
+
+class SentimentAnalysis(BaseModel):
+    sentiment: Literal["positive", "neutral", "negative", "mixed", "unknown"]
+    emotion: Literal["fear", "anger", "sadness", "distrust", "hope", "trust", "call_to_action", "neutral_state"]
+    intensity: Literal["low", "medium", "high"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str
+
 class DeepSeekSentimentAnalyzer:
-    """Centralized sentiment analyzer using DeepSeek API"""
+    """Centralized sentiment analyzer using DeepSeek API with Pydantic validation"""
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -59,6 +73,7 @@ class DeepSeekSentimentAnalyzer:
         # Get configuration
         self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
         self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        self.prompt_version = "v2.0_shared"
         
         # Initialize client
         self.client = OpenAI(
@@ -73,297 +88,334 @@ class DeepSeekSentimentAnalyzer:
         items: List[Dict[str, Any]],
         text_field: str = 'text',
         comments_field: Optional[str] = None,
-        max_retries: int = 3
+        max_retries: int = 2,
+        max_workers: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Analyze sentiment for a batch of items.
+        Analyze sentiment for a batch of items using concurrent individual calls.
         
         Args:
             items: List of dictionaries containing text to analyze
-            text_field: Field name containing the main text (e.g., 'post_text', 'post_caption')
-            comments_field: Optional field name containing comments JSON string
-            max_retries: Number of retry attempts
+            text_field: Field name containing the main text
+            comments_field: Optional field name containing comments JSON string or list
+            max_retries: Number of retry attempts per individual call
+            max_workers: Number of parallel processing threads
         
         Returns:
-            List of dictionaries with sentiment analysis results:
-            {
-                'sentiment': 'positive/negative/neutral/mixed',
-                'score': float (0-1),
-                'reasoning': str
-            }
+            List of dictionaries with sentiment analysis results
         """
         if not items:
             return []
         
-        print(f"\n🔍 Analyzing {len(items)} items with DeepSeek...")
+        print(f"\n🔍 Analyzing {len(items)} items concurrently with DeepSeek...")
         
-        # Create batch prompt
-        prompt = self._create_batch_prompt(items, text_field, comments_field)
-        
-        # Estimate tokens
-        estimated_tokens = len(prompt) // 4
-        print(f"   📊 Estimated input tokens: ~{estimated_tokens}")
-        
-        # Calculate max output tokens
-        max_tokens_output = max(500, int(len(items) * 80 * 1.3 + 200))
-        print(f"   📤 Max output tokens: {max_tokens_output}")
-        
-        # Retry loop
-        for attempt in range(max_retries):
-            try:
-                print(f"\n📤 Sending request (attempt {attempt + 1}/{max_retries})...")
-                
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "Eres un analizador de sentimientos experto. Responde solo con JSON válido."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    temperature=0.3,
-                    max_tokens=max_tokens_output
-                )
-                
-                # Extract response
-                response_text = response.choices[0].message.content.strip()
-                
-                # Show token usage
-                usage = response.usage
-                print(f"   💰 Tokens used: {usage.total_tokens} (input: {usage.prompt_tokens}, output: {usage.completion_tokens})")
-                
-                # Parse JSON
-                results = self._parse_response(response_text, len(items))
-                
-                print(f"\n✅ Analysis successful! Processed {len(results)} items")
-                return results
-                
-            except json.JSONDecodeError as e:
-                print(f"⚠️ JSON parse error (attempt {attempt + 1}/{max_retries}): {e}")
-                print(f"Response preview: {response_text[:300]}...")
-                
-            except Exception as e:
-                print(f"⚠️ Error (attempt {attempt + 1}/{max_retries}): {e}")
+        def process_single(item):
+            text = str(item.get(text_field, ''))
             
-            if attempt < max_retries - 1:
-                print("   Waiting 3 seconds before retry...")
-                time.sleep(3)
+            # Handle comments parsing
+            comments = None
+            if comments_field and comments_field in item:
+                val = item[comments_field]
+                if isinstance(val, str) and val.strip().startswith('['):
+                    try:
+                        comments = json.loads(val)
+                    except:
+                        comments = []
+                elif isinstance(val, list):
+                    comments = val
+            
+            return self.analyze_individual(text, comments, max_retries)
+            
+        # Execute concurrently
+        results = []
+        completed = 0
+        total = len(items)
         
-        # If all retries fail, return defaults
-        print("\n❌ All attempts failed, using default values")
-        return [
-            {
-                'sentiment': 'unknown',
-                'score': 0.5,
-                'reasoning': 'Analysis failed after retries'
-            }
-            for _ in items
-        ]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_item = {executor.submit(process_single, item): item for item in items}
+            
+            for future in concurrent.futures.as_completed(future_to_item):
+                try:
+                    res = future.result()
+                    results.append(res)
+                except Exception as exc:
+                    print(f"⚠️ Error in concurrent processing: {exc}")
+                    results.append({
+                        'sentiment': 'unknown',
+                        'emotion': 'none',
+                        'intensity': 'none',
+                        'confidence': 0.0,
+                        'reasoning': f"Error: {str(exc)}",
+                        'score': 0.0,
+                        'status': 'error'
+                    })
+                
+                completed += 1
+                if completed % max(1, total // 10) == 0 or completed == total:
+                    print(f"   [{completed}/{total}] items processed...")
+                    
+        return results
     
     def analyze_individual(
         self,
         text: str,
         comments: Optional[List[str]] = None,
-        max_retries: int = 3
+        max_retries: int = 2
     ) -> Dict[str, Any]:
         """
-        Analyze sentiment for a single item.
+        Analyze sentiment for a single item with Pydantic validation and auto-repair.
         
         Args:
             text: Main text to analyze
             comments: Optional list of comments
-            max_retries: Number of retry attempts
+            max_retries: Number of retry attempts for schema validation
         
         Returns:
-            Dictionary with sentiment analysis:
-            {
-                'sentiment': 'positive/negative/neutral/mixed',
-                'score': float (0-1),
-                'reasoning': str
-            }
+            Dictionary with parsed sentiment analysis or fallback values
         """
-        prompt = self._create_individual_prompt(text, comments)
         
-        for attempt in range(max_retries):
+        system_prompt = (
+            f"Eres un experto analizador de sentimientos. Version: {self.prompt_version}\n"
+            "Tu tarea es analizar el texto suministrado en el contexto de un POST (y posiblemente sus COMENTARIOS).\n"
+            "Identifica el sentimiento predominante, la emoción primaria y su intensidad.\n"
+            "Debes responder ÚNICAMENTE con un JSON válido que cumpla con este esquema exacto:\n"
+            f"{json.dumps(SentimentAnalysis.model_json_schema(), ensure_ascii=False)}\n\n"
+            "No incluyas texto extra, ni bloques de código (```json). SOLO el objeto JSON."
+        )
+        
+        user_prompt = f"TEXTO A ANALIZAR: {text[:1500]}\n"
+        
+        if comments and len(comments) > 0:
+            comments_str_list = []
+            for c in comments[:10]:
+                if isinstance(c, dict):
+                    comments_str_list.append(str(c.get('text', ''))[:200])
+                else:
+                    comments_str_list.append(str(c)[:200])
+            comments_str = " | ".join(comments_str_list)
+            user_prompt += f"\nCOMENTARIOS DEL POST: {comments_str}\n"
+            
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        for attempt in range(max_retries + 1):
             try:
                 response = self.client.chat.completions.create(
                     model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "Eres un analizador de sentimientos. Responde solo con JSON."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    temperature=0.3,
-                    max_tokens=200
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=300
                 )
                 
                 response_text = response.choices[0].message.content.strip()
                 
-                # Clean and parse JSON
-                response_text = self._clean_json_response(response_text)
-                data = json.loads(response_text)
+                # Clean markdown if present
+                if response_text.startswith("```json"):
+                    response_text = response_text.replace("```json", "").replace("```", "").strip()
+                elif response_text.startswith("```"):
+                    response_text = response_text.replace("```", "").strip()
                 
-                return {
-                    'sentiment': data.get('sentiment', 'unknown'),
-                    'score': data.get('score', 0.5),
-                    'reasoning': data.get('reasoning', 'No reasoning provided')
-                }
+                # Parse and strict-validate using Pydantic
+                try:
+                    data = json.loads(response_text)
+                except json.JSONDecodeError as decode_error:
+                    error_msg = f"JSONDecodeError: {str(decode_error)}. Por favor corrige el output y responde SÓLO con JSON válido."
+                    messages.append({"role": "assistant", "content": response_text})
+                    messages.append({"role": "user", "content": error_msg})
+                    continue
                 
+                try:
+                    analysis = SentimentAnalysis(**data)
+                    return {
+                        'status': 'success',
+                        'sentiment': analysis.sentiment,
+                        'emotion': analysis.emotion,
+                        'intensity': analysis.intensity,
+                        'confidence': analysis.confidence,
+                        'score': analysis.confidence, # backward compatibility
+                        'reasoning': analysis.reasoning
+                    }
+                except ValidationError as ve:
+                    error_msg = f"ValidationError: {str(ve)}. El JSON no cumple el esquema requerido. Corrige campos según las categorías (enums) permitidas en el esquema."
+                    messages.append({"role": "assistant", "content": response_text})
+                    messages.append({"role": "user", "content": error_msg})
+                    continue
+                    
             except Exception as e:
-                print(f"⚠️ Error analyzing item (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(2)
+                print(f"   ⚠️ API Error (attempt {attempt+1}): {e}")
+                time.sleep(2)
         
         return {
+            'status': 'failed',
             'sentiment': 'unknown',
-            'score': 0.5,
-            'reasoning': 'Analysis failed'
+            'emotion': 'none',
+            'intensity': 'none',
+            'confidence': 0.0,
+            'score': 0.0,
+            'reasoning': 'Analysis mapping failed after retries'
         }
-    
-    def _create_batch_prompt(
-        self,
-        items: List[Dict[str, Any]],
-        text_field: str,
-        comments_field: Optional[str]
-    ) -> str:
-        """Create optimized batch prompt"""
-        prompt = "Analiza el sentimiento de los siguientes posts. Responde con un JSON array.\n\nPOSTS:\n"
-        
-        for idx, item in enumerate(items):
-            text = str(item.get(text_field, ''))[:200]  # Limit to 200 chars
-            item_id = item.get('post_id', item.get('id', idx + 1))
-            
-            prompt += f"\n{idx+1}|{item_id}|{text}"
-            
-            # Add comments if available
-            if comments_field and comments_field in item:
-                comments_json = item[comments_field]
-                try:
-                    if isinstance(comments_json, str):
-                        comments_list = json.loads(comments_json)
-                    else:
-                        comments_list = comments_json
-                    
-                    if comments_list and len(comments_list) > 0:
-                        comments_compact = " | ".join([str(c)[:100] for c in comments_list[:5]])
-                        prompt += f"|{comments_compact}"
-                    else:
-                        prompt += "|NO_COMMENTS"
-                except:
-                    prompt += "|NO_COMMENTS"
-            else:
-                prompt += "|NO_COMMENTS"
-            
-            prompt += "\n"
-        
-        prompt += '\n\nRespuesta JSON: [{"id":"post_id","sentiment":"positive/negative/neutral/mixed","score":0-1,"reasoning":"razón breve"}]\nSolo JSON, sin markdown.'
-        
-        return prompt
-    
-    def _create_individual_prompt(self, text: str, comments: Optional[List[str]]) -> str:
-        """Create prompt for individual analysis"""
-        prompt = f"Analiza el sentimiento de este post:\n\nPOST: {text[:200]}\n"
-        
-        if comments and len(comments) > 0:
-            comments_str = " | ".join([c[:80] for c in comments[:5]])
-            prompt += f"\nCOMENTARIOS: {comments_str}\n"
-        else:
-            prompt += "\nCOMENTARIOS: NINGUNO\n"
-        
-        prompt += '\n\nResponde con JSON: {"sentiment":"positive/negative/neutral/mixed","score":0-1,"reasoning":"breve"}\nSolo JSON, sin markdown.'
-        
-        return prompt
-    
-    def _clean_json_response(self, text: str) -> str:
-        """Clean JSON response from markdown or extra text"""
-        text = text.strip()
-        
-        # Remove markdown code blocks
-        if text.startswith('```json'):
-            text = text.replace('```json', '').replace('```', '').strip()
-        elif text.startswith('```'):
-            text = text.replace('```', '').strip()
-        
-        # Extract JSON array or object - be more aggressive
-        # Look for the FIRST opening bracket and LAST matching closing bracket
-        if '[' in text:
-            start = text.find('[')
-            # Find the matching closing bracket by counting
-            bracket_count = 0
-            end = -1
-            for i in range(start, len(text)):
-                if text[i] == '[':
-                    bracket_count += 1
-                elif text[i] == ']':
-                    bracket_count -= 1
-                    if bracket_count == 0:
-                        end = i + 1
-                        break
-            
-            if start != -1 and end > start:
-                text = text[start:end]
-        elif '{' in text:
-            start = text.find('{')
-            # Find the matching closing brace
-            brace_count = 0
-            end = -1
-            for i in range(start, len(text)):
-                if text[i] == '{':
-                    brace_count += 1
-                elif text[i] == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end = i + 1
-                        break
-            
-            if start != -1 and end > start:
-                text = text[start:end]
-        
-        return text.strip()
 
-    
-    def _parse_response(self, response_text: str, expected_count: int) -> List[Dict[str, Any]]:
-        """Parse and validate response"""
-        response_text = self._clean_json_response(response_text)
+    def harmonize_dataset(self, df: pd.DataFrame, platform: str, target_per_month: int = 1000) -> pd.DataFrame:
+        """
+        Phase 3: Harmonization and balance.
+        Estratifica por year y month. Si N > target, hace subsample.
+        Si N < target, conserva todo y marca low_volume.
+        Exports run_audit.csv and saves normalized parquet.
+        """
+        print(f"\n=== Phase 3: Harmonizing Dataset for {platform} ===")
         
-        data = json.loads(response_text)
-        
-        # Extract array from response
-        if isinstance(data, dict):
-            results = data.get('results') or data.get('sentiments') or list(data.values())[0]
-        else:
-            results = data
-        
-        if not isinstance(results, list):
-            raise ValueError("Response is not a list")
-        
-        # Normalize results
-        normalized = []
-        for i in range(expected_count):
-            if i < len(results):
-                result = results[i]
-                normalized.append({
-                    'sentiment': result.get('s') or result.get('sentiment', 'unknown'),
-                    'score': result.get('sc') or result.get('score', 0.5),
-                    'reasoning': result.get('r') or result.get('reasoning', 'No reasoning')
-                })
+        if 'year' not in df.columns or 'month' not in df.columns:
+            # Intentar deducir
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+                df['year'] = df['timestamp'].dt.year
+                df['month'] = df['timestamp'].dt.month
             else:
-                normalized.append({
-                    'sentiment': 'unknown',
-                    'score': 0.5,
-                    'reasoning': 'No result from API'
-                })
+                df['year'] = datetime.now().year
+                df['month'] = datetime.now().month
+                
+        # Fill NA
+        df['year'] = df['year'].fillna(datetime.now().year).astype(int)
+        df['month'] = df['month'].fillna(datetime.now().month).astype(int)
         
-        return normalized
+        audit_records = []
+        harmonized_frames = []
+        
+        out_dir = f"normalized/final/{platform}"
+        os.makedirs(out_dir, exist_ok=True)
+        
+        for (year, month), group in df.groupby(['year', 'month']):
+            current_n = len(group)
+            
+            if current_n > target_per_month:
+                # Subsample
+                sampled = group.sample(n=target_per_month, random_state=42)
+                low_volume = False
+                final_n = target_per_month
+            else:
+                sampled = group.copy()
+                low_volume = True
+                final_n = current_n
+                
+            sampled['is_low_volume'] = low_volume
+            harmonized_frames.append(sampled)
+            
+            audit_records.append({
+                'platform': platform,
+                'year': year,
+                'month': month,
+                'original_n': current_n,
+                'target_n': target_per_month,
+                'final_n': final_n,
+                'low_volume_flag': low_volume,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Export parquet
+            ym_str = f"{year}-{month:02d}"
+            pq_path = os.path.join(out_dir, f"{ym_str}.parquet")
+            sampled.to_parquet(pq_path, index=False)
+            print(f"  -> Saved normalized data to {pq_path} (N={final_n})")
+            
+        final_df = pd.concat(harmonized_frames, ignore_index=True) if harmonized_frames else pd.DataFrame()
+        
+        # Save audit
+        audit_df = pd.DataFrame(audit_records)
+        os.makedirs("reports", exist_ok=True)
+        audit_path = os.path.join("reports", f"run_audit_{platform}_{int(time.time())}.csv")
+        audit_df.to_csv(audit_path, index=False)
+        print(f"  -> Saved audit report to {audit_path}")
+        
+        return final_df
+
+    def process_dataset_robustly(self, df: pd.DataFrame, platform: str, text_col: str = 'text', comments_col: str = 'comments', max_workers: int = 5) -> pd.DataFrame:
+        """
+        Phase 4: Hierarchical Classification + Robustness Metrics
+        Executes robust LLM calls and tracks metrics, outputs labelled Parquet.
+        """
+        print(f"\n=== Phase 4: Robust LLM Classification for {platform} ===")
+        total_items = len(df)
+        
+        metrics = {
+            "total_attempts": 0,
+            "failed_status_count": 0,
+            "invalid_json_count": 0, 
+            "confidences": []
+        }
+        
+        items = []
+        for idx, row in df.iterrows():
+            item = dict(row)
+            item['text_for_llm'] = row[text_col] if text_col in row else row.get('text', '')
+            item['comments_for_llm'] = row[comments_col] if comments_col in row else ''
+            items.append(item)
+            
+        # Analysis
+        start_time = time.time()
+        results = self.analyze_batch(
+            items,
+            text_field='text_for_llm',
+            comments_field='comments_for_llm',
+            max_retries=2,
+            max_workers=max_workers
+        )
+        end_time = time.time()
+        
+        # Merge results into dataframe
+        for idx, res in enumerate(results):
+            df.at[idx, 'sentiment'] = res.get('sentiment', 'unknown')
+            df.at[idx, 'emotion'] = res.get('emotion', 'none')
+            df.at[idx, 'intensity'] = res.get('intensity', 'none')
+            df.at[idx, 'confidence'] = res.get('confidence', 0.0)
+            df.at[idx, 'reasoning'] = res.get('reasoning', '')
+            
+            if res.get('status') == 'failed':
+                metrics['failed_status_count'] += 1
+            if res.get('confidence', 0.0) > 0:
+                metrics['confidences'].append(res['confidence'])
+                
+        metrics['total_attempts'] = len(results)
+        
+        # Output Labeled Data
+        year_month = datetime.now().strftime("%Y-%m")
+        labeled_dir = f"labeled/{platform}"
+        os.makedirs(labeled_dir, exist_ok=True)
+        parquet_path = f"{labeled_dir}/{year_month}.parquet"
+        
+        df.to_parquet(parquet_path, index=False)
+        print(f"\n✅ Labeled data saved to {parquet_path}")
+        
+        # Export Quality Metrics
+        run_id = str(uuid.uuid4())[:8]
+        reports_dir = "reports"
+        os.makedirs(reports_dir, exist_ok=True)
+        
+        failed_rate = metrics["failed_status_count"] / max(1, total_items)
+        conf_series = pd.Series(metrics["confidences"])
+        
+        metrics_data = {
+           "run_id": run_id,
+           "platform": platform,
+           "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+           "total_processed": total_items,
+           "tasa_llm_status_failed": failed_rate,
+           "confidence_mean": conf_series.mean() if not conf_series.empty else 0,
+           "confidence_std": conf_series.std() if not conf_series.empty else 0,
+           "confidence_q1": conf_series.quantile(0.25) if not conf_series.empty else 0,
+           "confidence_q2": conf_series.quantile(0.50) if not conf_series.empty else 0,
+           "confidence_q3": conf_series.quantile(0.75) if not conf_series.empty else 0,
+           "prompt_version": self.prompt_version,
+           "execution_time_s": round(end_time - start_time, 2)
+        }
+        
+        metrics_df = pd.DataFrame([metrics_data])
+        metrics_path = f"{reports_dir}/llm_quality_{run_id}.csv"
+        metrics_df.to_csv(metrics_path, index=False)
+        print(f"✅ LLM Quality metrics report saved to {metrics_path}")
+        
+        return df
 
 
 # Convenience functions for backward compatibility

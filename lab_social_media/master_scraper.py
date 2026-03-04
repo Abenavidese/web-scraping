@@ -13,12 +13,30 @@ from datetime import datetime
 import sys
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import platform
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+# Import academic metrics collector
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shared.academic_metrics import AcademicMetricsCollector
 
 # Fix Windows encoding issues for emojis
 if sys.platform == 'win32':
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    # Only wrap if not already wrapped
+    if not isinstance(sys.stdout, io.TextIOWrapper) or sys.stdout.encoding != 'utf-8':
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        except:
+            pass
+    if not isinstance(sys.stderr, io.TextIOWrapper) or sys.stderr.encoding != 'utf-8':
+        try:
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        except:
+            pass
 
 class SocialMediaScraperManager:
     """Gestor principal para la ejecución paralela de scrapers"""
@@ -50,8 +68,248 @@ class SocialMediaScraperManager:
         self.reset_color = '\033[0m'
         self.start_time = None
         self.end_time = None
+        
+    def get_system_info(self):
+        """Obtiene información básica del hardware"""
+        info = {
+            "system": platform.system(),
+            "processor": platform.processor(),
+            "machine": platform.machine(),
+            "cpu_count": multiprocessing.cpu_count(),
+            "ram": "Unknown"
+        }
+        
+        if psutil:
+            try:
+                ram = psutil.virtual_memory()
+                info["ram"] = f"{round(ram.total / (1024**3), 1)} GB"
+            except:
+                pass
+        
+        return info
     
-    def _run_scraper_wrapper(self, index, name, config, search_query, num_posts, num_comments, progress_queue, results_dict):
+    def run_sequential(self, query=None, posts=None, comments=None, target_comments=None, max_posts=None):
+        """Ejecuta todos los scrapers secuencialmente (para comparación)"""
+        self.print_header(mode="SECUENCIAL")
+        
+        # RECOGER PARÁMETROS UNA SOLA VEZ (Si no se pasaron)
+        if not query:
+            print("📝 CONFIGURACIÓN DE BÚSQUEDA")
+            print("-" * 80)
+            
+            search_query = input("Ingrese el tema de búsqueda (Tema): ").strip()
+            if not search_query:
+                search_query = "Inteligencia Artificial"
+                print(f"   Usando tema por defecto: {search_query}")
+            
+            try:
+                num_posts = int(input("Número de posts a extraer por red social: ").strip())
+            except ValueError:
+                num_posts = 10
+                print(f"   Usando valor por defecto: {num_posts} posts")
+            
+            try:
+                num_comments = int(input("Número de comentarios por post: ").strip())
+            except ValueError:
+                num_comments = 5
+                print(f"   Usando valor por defecto: {num_comments} comentarios")
+            
+            print("\n" + "="*80)
+        else:
+            search_query = query
+            num_posts = posts
+            num_comments = comments
+            
+        print(f"✅ Configuración establecida:")
+        print(f"   • Tema: {search_query}")
+        if target_comments:
+            print(f"   • MODO: Basado en comentarios")
+            print(f"   • Objetivo de comentarios: {target_comments}")
+            print(f"   • Máximo de posts: {max_posts}")
+        else:
+            print(f"   • Posts por red social: {num_posts}")
+            print(f"   • Comentarios por post: {num_comments}")
+        print("="*80 + "\n")
+        
+        # Initialize academic metrics collector
+        academic_metrics = AcademicMetricsCollector()
+        platform_names = ['x', 'instagram', 'facebook', 'linkedin']
+        academic_metrics.start_run(
+            query=search_query,
+            mode="sequential",
+            platforms=platform_names,
+            n_processes=1  # Sequential = 1 process at a time
+        )
+        
+        self.start_time = time.time()
+        
+        print("🚀 Iniciando extracción SECUENCIAL de datos...\n")
+        
+        results = []
+        
+        for name, config in self.scrapers.items():
+            print(f"{config['color']}[{name}] ▶️  Iniciando scraper (Modo Secuencial)...{self.reset_color}")
+            
+            # Record platform start
+            network_name = self._get_platform_key(name)
+            academic_metrics.record_platform_start(network_name)
+            
+            # Ejecutar scraper (usando la misma función run_scraper pero síncronamente)
+            # Pasamos None como queue porque no necesitamos comunicación entre procesos
+            result = self.run_scraper(name, config, search_query, num_posts, num_comments, target_comments, max_posts, None)
+            
+            if result['status'] == 'success':
+                execution_time = result['execution_time']
+                print(f"{config['color']}[{name}] ✅ Completado exitosamente en {execution_time:.2f}s{self.reset_color}")
+                
+                # Collect metrics
+                if result.get('metrics'):
+                    metrics = result['metrics']
+                    data_metrics = metrics.get('data_metrics', {})
+                    exec_times = metrics.get('execution_times', {})
+                    sentiment_dist = metrics.get('sentiment_distribution', {})
+                    
+                    posts = data_metrics.get('posts_extracted', 0)
+                    comments = data_metrics.get('comments_extracted', 0)
+                    
+                    academic_metrics.record_platform_end(
+                        platform=network_name,
+                        posts=posts,
+                        comments=comments,
+                        errors=0,
+                        retries=0
+                    )
+                    
+                    academic_metrics.record_preprocessing_time(exec_times.get('text_processing', 0))
+                    academic_metrics.record_llm_time(exec_times.get('sentiment_analysis', 0))
+                    
+                    for sentiment, count in sentiment_dist.items():
+                        for _ in range(count):
+                            academic_metrics.add_sentiment_result(sentiment)
+            else:
+                print(f"{config['color']}[{name}] ❌ Falló o tuvo errores{self.reset_color}")
+                if 'stderr' in result:
+                     print(f"{config['color']}[{name}] Error: {result['stderr'][:200]}...{self.reset_color}")
+                academic_metrics.record_error(network_name, "execution_failed", result.get('error', ''))
+            
+            results.append(result)
+        
+        self.end_time = time.time()
+        total_time = self.end_time - self.start_time
+        
+        # End academic metrics
+        academic_metrics.end_run()
+        
+        # Consolidar métricas
+        consolidated_metrics = self.consolidate_metrics(results, total_time, search_query)
+        # Forzar modo secuencial en métricas
+        consolidated_metrics['parallel_execution']['mode'] = 'SEQUENTIAL'
+        consolidated_metrics['parallel_execution']['speedup'] = 1.0
+        consolidated_metrics['parallel_execution']['efficiency'] = 100.0
+        
+        # Mostrar resumen de resultados
+        self.print_summary(results, total_time)
+        
+        # Generar reportes de métricas
+        self.generate_metrics_reports(consolidated_metrics)
+        
+        # Export academic metrics
+        print("\n" + "="*80)
+        print("📊 EXPORTANDO MÉTRICAS ACADÉMICAS (SECUENCIAL)")
+        print("="*80)
+        files = academic_metrics.export_all()
+        print(f"\n✅ Archivos académicos generados:")
+        print(f"   📊 Métricas: {files['metrics']}")
+        if files['dataset']:
+            print(f"   📄 Dataset: {files['dataset']}")
+        print(f"   📝 Log: {files['log']}")
+        print("\n" + academic_metrics.get_summary())
+        
+        return results, total_time # Return tuple for comparison
+    
+    
+    def generate_validation_sample(self, search_query):
+        """Genera un archivo de validación con muestras aleatorias"""
+        import random
+        
+        user_id = str(os.getenv("USER_ID", "default"))
+        query_slug = search_query.lower() # Simple approximation, better to import slugify if needed
+        query_slug = ''.join(c if c.isalnum() else '_' for c in query_slug).strip('_')
+        
+        output_data = []
+        
+        # Paths to check based on scraper structure
+        paths = {
+            "Facebook": os.path.join("..", "users", user_id, "facebook", query_slug, f"metrics.json"),
+            "Instagram": os.path.join("..", "users", user_id, "instagram", query_slug, f"metrics.json"),
+            "X (Twitter)": os.path.join("..", "users", user_id, "x", query_slug, f"metrics.json"),
+            "LinkedIn": os.path.join("..", "users", user_id, "linkedin", query_slug, f"metrics.json")
+        }
+        
+        # We need to find the CSVs really, metrics.json tells us it worked
+        # Facebook: datos_extraidos_deepseek.csv
+        # Instagram: sentiment_results_{query}.csv or processed_{query}.csv containing sentiments?
+        # Actually each scraper saves a final result.
+        
+        print("\n🔍 Generando muestra de validación...")
+        
+        sample_file = os.path.join(self.base_dir, 'logs', f'validation_sample_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt')
+        
+        with open(sample_file, 'w', encoding='utf-8') as f:
+            f.write(f"MUESTRA DE VALIDACIÓN MANUAL\n")
+            f.write(f"Fecha: {datetime.now()}\n")
+            f.write(f"Query: {search_query}\n")
+            f.write("="*80 + "\n\n")
+            
+            for network, metrics_path in paths.items():
+                # Construct data path based on known structure from scrapers
+                base_path = os.path.dirname(metrics_path)
+                data_path = ""
+                
+                # Intentar adivinar el nombre del archivo de resultados de cada red
+                if "facebook" in network.lower():
+                    data_path = os.path.join(base_path, "datos_extraidos_deepseek.csv")
+                elif "instagram" in network.lower():
+                    data_path = os.path.join(base_path, f"sentiment_results_{query_slug}.csv") 
+                elif "twitter" in network.lower() or "x" in network.lower():
+                     data_path = os.path.join(base_path, "sentiment_results.csv")
+                elif "linkedin" in network.lower():
+                    data_path = os.path.join(base_path, "datos_extraidos_deepseek.csv")
+                
+                full_path = os.path.abspath(os.path.join(self.base_dir, data_path))
+                
+                if os.path.exists(full_path):
+                     try:
+                         import csv
+                         with open(full_path, 'r', encoding='utf-8', errors='replace') as csvfile:
+                             reader = list(csv.DictReader(csvfile))
+                             if reader:
+                                 # Select 5 random samples
+                                 samples = random.sample(reader, min(5, len(reader)))
+                                 
+                                 f.write(f"--- {network} (Muestras: {len(samples)}) ---\n")
+                                 for i, row in enumerate(samples):
+                                     # Extract sentiment and text
+                                     # Column names vary: 'sentiment', 'sentiment_deepseek', 'content', 'text', 'caption_snippet'
+                                     
+                                     sentiment = row.get('sentiment') or row.get('sentiment_deepseek') or "N/A"
+                                     text = row.get('content') or row.get('text') or row.get('caption_snippet') or row.get('clean_text') or "N/A"
+                                     explanation = row.get('explanation_deepseek') or row.get('sentiment_reasoning') or row.get('reasoning') or ""
+                                     
+                                     f.write(f"[{i+1}] Sentimiento: {sentiment}\n")
+                                     if explanation:
+                                         f.write(f"    Explicación: {explanation[:100]}...\n")
+                                     f.write(f"    Texto: {text[:150].replace(chr(10), ' ')}...\n\n")
+                             else:
+                                 f.write(f"--- {network}: Archivo CSV vacío ---\n\n")
+                     except Exception as e:
+                         f.write(f"--- {network}: Error leyendo CSV ({str(e)}) ---\n\n")
+                else:
+                    f.write(f"--- {network}: No se encontró archivo de resultados ({data_path}) ---\n\n")
+        
+        print(f"📄 Muestra de validación guardada en: {sample_file}")
+
+    def _run_scraper_wrapper(self, index, name, config, search_query, num_posts, num_comments, target_comments, max_posts, progress_queue, results_dict):
         """
         Wrapper para ejecutar un scraper y guardar su resultado
         
@@ -60,26 +318,50 @@ class SocialMediaScraperManager:
             name (str): Nombre de la red social
             config (dict): Configuración del scraper
             search_query (str): Tema de búsqueda
-            num_posts (int): Número de posts
-            num_comments (int): Número de comentarios
+            num_posts (int): Número de posts (modo antiguo)
+            num_comments (int): Número de comentarios (modo antiguo)
+            target_comments (int): Número objetivo de comentarios (modo nuevo)
+            max_posts (int): Máximo de posts (modo nuevo)
             progress_queue (Queue): Cola para comunicar progreso
             results_dict (dict): Diccionario compartido para guardar resultados
         """
-        result = self.run_scraper(name, config, search_query, num_posts, num_comments, progress_queue)
+        result = self.run_scraper(name, config, search_query, num_posts, num_comments, target_comments, max_posts, progress_queue)
         results_dict[index] = result
         
-    def print_header(self):
+    def print_header(self, mode="PARALELO"):
         """Imprime el encabezado del programa"""
+        info = self.get_system_info()
+        
         print("\n" + "="*80)
-        print("  EXTRACCIÓN PARALELA DE DATOS DE REDES SOCIALES")
-        print("  Práctica de Laboratorio - Computación Paralela")
+        print(f"  EXTRACCIÓN DE DATOS DE REDES SOCIALES - MODO {mode}")
+        print("  Práctica de Laboratorio - Computación Paralela y Avanzada")
         print("="*80)
-        print(f"\n📅 Fecha de inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"🔧 Número de procesos paralelos: {len(self.scrapers)}")
-        print(f"🌐 Redes sociales a procesar: {', '.join(self.scrapers.keys())}\n")
+        print(f"\n📅 Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"💻 Sistema: {info['system']} {info['machine']}")
+        print(f"🧠 CPU: {info['processor']} ({info['cpu_count']} núcleos)")
+        print(f"💾 RAM: {info['ram']}")
+        print(f"🔧 Procesos: {len(self.scrapers)} | Modo: {mode}")
         print("="*80 + "\n")
     
-    def run_scraper(self, name, config, search_query, num_posts, num_comments, progress_queue=None):
+    def _get_platform_key(self, display_name: str) -> str:
+        """
+        Convert display name to platform key.
+        
+        Args:
+            display_name: Display name like 'X (Twitter)', 'Instagram', etc.
+        
+        Returns:
+            Platform key like 'x', 'instagram', 'facebook', 'linkedin'
+        """
+        mapping = {
+            'X (Twitter)': 'x',
+            'Instagram': 'instagram',
+            'Facebook': 'facebook',
+            'LinkedIn': 'linkedin'
+        }
+        return mapping.get(display_name, display_name.lower())
+    
+    def run_scraper(self, name, config, search_query, num_posts, num_comments, target_comments, max_posts, progress_queue=None):
         """
         Ejecuta un scraper individual en un proceso separado
         
@@ -87,8 +369,10 @@ class SocialMediaScraperManager:
             name (str): Nombre de la red social
             config (dict): Configuración del scraper (directorio y script)
             search_query (str): Tema de búsqueda
-            num_posts (int): Número de posts a extraer
-            num_comments (int): Número de comentarios por post
+            num_posts (int): Número de posts a extraer (modo antiguo)
+            num_comments (int): Número de comentarios por post (modo antiguo)
+            target_comments (int): Número objetivo de comentarios (modo nuevo)
+            max_posts (int): Máximo de posts (modo nuevo)
             progress_queue (Queue): Cola para comunicar progreso (opcional)
         
         Returns:
@@ -114,10 +398,18 @@ class SocialMediaScraperManager:
             command = [
                 sys.executable,
                 config['script'],
-                '--query', search_query,
-                '--posts', str(num_posts),
-                '--comments', str(num_comments)
+                '--query', search_query
             ]
+            
+            # Agregar parámetros según el modo
+            if target_comments is not None:
+                # Modo NUEVO: Basado en comentarios
+                command.extend(['--target-comments', str(target_comments)])
+                command.extend(['--max-posts', str(max_posts)])
+            else:
+                # Modo ANTIGUO: Basado en posts
+                command.extend(['--posts', str(num_posts)])
+                command.extend(['--comments', str(num_comments)])
             
             # Ejecutar el scraper
             result = subprocess.run(
@@ -204,37 +496,81 @@ class SocialMediaScraperManager:
         except Exception as e:
             print(f"Error parsing metrics: {e}")
             return None
-    def run_parallel(self):
+    def run_parallel(self, query=None, posts=None, comments=None, target_comments=None, max_posts=None):
         """Ejecuta todos los scrapers en paralelo usando multiprocessing"""
         self.print_header()
         
         # RECOGER PARÁMETROS UNA SOLA VEZ
-        print("📝 CONFIGURACIÓN DE BÚSQUEDA")
-        print("-" * 80)
+        if not query:
+            print("📝 CONFIGURACIÓN DE BÚSQUEDA")
+            print("-" * 80)
+            
+            search_query = input("Ingrese el tema de búsqueda (Tema): ").strip()
+            if not search_query:
+                search_query = "Inteligencia Artificial"
+                print(f"   Usando tema por defecto: {search_query}")
+            
+            # Preguntar modo de scraping
+            mode = input("Modo de scraping: [1] Por posts (antiguo) [2] Por comentarios (nuevo, recomendado): ").strip()
+            
+            if mode == "2":
+                # Modo basado en comentarios
+                try:
+                    num_target_comments = int(input("Número objetivo de comentarios totales (recomendado 800): ").strip())
+                except ValueError:
+                    num_target_comments = 800
+                    print(f"   Usando valor por defecto: {num_target_comments} comentarios")
+                
+                try:
+                    num_max_posts = int(input("Máximo de posts a scrapear (límite de seguridad, default 200): ").strip())
+                except ValueError:
+                    num_max_posts = 200
+                    print(f"   Usando valor por defecto: {num_max_posts} posts")
+                
+                target_comments = num_target_comments
+                max_posts = num_max_posts
+                num_posts = None
+                num_comments = None
+            else:
+                # Modo antiguo basado en posts
+                try:
+                    num_posts = int(input("Número de posts a extraer por red social: ").strip())
+                except ValueError:
+                    num_posts = 10
+                    print(f"   Usando valor por defecto: {num_posts} posts")
+                
+                try:
+                    num_comments = int(input("Número de comentarios por post: ").strip())
+                except ValueError:
+                    num_comments = 5
+                    print(f"   Usando valor por defecto: {num_comments} comentarios")
+            
+            print("\n" + "="*80)
+        else:
+            search_query = query
+            num_posts = posts
+            num_comments = comments
         
-        search_query = input("Ingrese el tema de búsqueda (Tema): ").strip()
-        if not search_query:
-            search_query = "Inteligencia Artificial"
-            print(f"   Usando tema por defecto: {search_query}")
-        
-        try:
-            num_posts = int(input("Número de posts a extraer por red social: ").strip())
-        except ValueError:
-            num_posts = 10
-            print(f"   Usando valor por defecto: {num_posts} posts")
-        
-        try:
-            num_comments = int(input("Número de comentarios por post: ").strip())
-        except ValueError:
-            num_comments = 5
-            print(f"   Usando valor por defecto: {num_comments} comentarios")
-        
-        print("\n" + "="*80)
         print(f"✅ Configuración establecida:")
         print(f"   • Tema: {search_query}")
-        print(f"   • Posts por red social: {num_posts}")
-        print(f"   • Comentarios por post: {num_comments}")
+        if target_comments:
+            print(f"   • MODO: Basado en comentarios")
+            print(f"   • Objetivo de comentarios: {target_comments}")
+            print(f"   • Máximo de posts: {max_posts}")
+        else:
+            print(f"   • Posts por red social: {num_posts}")
+            print(f"   • Comentarios por post: {num_comments}")
         print("="*80 + "\n")
+        
+        # Initialize academic metrics collector
+        academic_metrics = AcademicMetricsCollector()
+        platform_names = ['x', 'instagram', 'facebook', 'linkedin']
+        academic_metrics.start_run(
+            query=search_query,
+            mode="parallel",
+            platforms=platform_names,
+            n_processes=len(self.scrapers)
+        )
         
         self.start_time = time.time()
         
@@ -251,7 +587,7 @@ class SocialMediaScraperManager:
         for i, (name, config) in enumerate(self.scrapers.items()):
             p = multiprocessing.Process(
                 target=self._run_scraper_wrapper,
-                args=(i, name, config, search_query, num_posts, num_comments, progress_queue, results_dict)
+                args=(i, name, config, search_query, num_posts, num_comments, target_comments, max_posts, progress_queue, results_dict)
             )
             processes.append((name, p))
             p.start()
@@ -301,6 +637,45 @@ class SocialMediaScraperManager:
         self.end_time = time.time()
         total_time = self.end_time - self.start_time
         
+        # Collect metrics from each scraper
+        for result in results:
+            if result['status'] == 'success' and result.get('metrics'):
+                metrics = result['metrics']
+                network_name = self._get_platform_key(result['name'])
+                
+                # Extract data from metrics
+                data_metrics = metrics.get('data_metrics', {})
+                exec_times = metrics.get('execution_times', {})
+                sentiment_dist = metrics.get('sentiment_distribution', {})
+                
+                posts = data_metrics.get('posts_extracted', 0)
+                comments = data_metrics.get('comments_extracted', 0)
+                
+                # Record platform results
+                academic_metrics.record_platform_end(
+                    platform=network_name,
+                    posts=posts,
+                    comments=comments,
+                    errors=0,  # Could be extracted from metrics if available
+                    retries=0
+                )
+                
+                # Record timing
+                academic_metrics.timing['time_scraping_per_platform_s'][network_name] = exec_times.get('scraping', 0)
+                academic_metrics.record_preprocessing_time(exec_times.get('text_processing', 0))
+                academic_metrics.record_llm_time(exec_times.get('sentiment_analysis', 0))
+                
+                # Record sentiments
+                for sentiment, count in sentiment_dist.items():
+                    for _ in range(count):
+                        academic_metrics.add_sentiment_result(sentiment)
+            elif result['status'] != 'success':
+                network_name = self._get_platform_key(result['name'])
+                academic_metrics.record_error(network_name, "execution_failed", result.get('error', ''))
+        
+        # End the run
+        academic_metrics.end_run()
+        
         # Consolidar métricas
         consolidated_metrics = self.consolidate_metrics(results, total_time, search_query)
         
@@ -313,7 +688,22 @@ class SocialMediaScraperManager:
         # Generar gráficas de paralelización
         self.generate_parallelization_charts(results, total_time)
         
-        return results
+        # Generar muestra de validación
+        self.generate_validation_sample(search_query)
+        
+        # Export academic metrics
+        print("\n" + "="*80)
+        print("📊 EXPORTANDO MÉTRICAS ACADÉMICAS")
+        print("="*80)
+        files = academic_metrics.export_all()
+        print(f"\n✅ Archivos académicos generados:")
+        print(f"   📊 Métricas: {files['metrics']}")
+        if files['dataset']:
+            print(f"   📄 Dataset: {files['dataset']}")
+        print(f"   📝 Log: {files['log']}")
+        print("\n" + academic_metrics.get_summary())
+        
+        return results, total_time
     
     def print_summary(self, results, total_time):
         """
@@ -743,18 +1133,80 @@ class SocialMediaScraperManager:
 
 def main():
     """Función principal"""
-    print("\n🎯 Iniciando Master Scraper...")
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Master Scraper - Ejecución Paralela de Scrapers")
+    parser.add_argument("--sequential", action="store_true", help="Ejecutar en modo secuencial (1 proceso a la vez)")
+    parser.add_argument("--compare", action="store_true", help="Ejecutar modo Secuencial Y Paralelo para comparar Speedup real")
+    # Argumentos para automatización
+    parser.add_argument("--query", type=str, default=None, help="Tema de búsqueda (Evita input interactivo)")
+    parser.add_argument("--posts", type=int, default=None, help="Número de posts por red (DEPRECADO: usar --target-comments)")
+    parser.add_argument("--comments", type=int, default=None, help="Número de comentarios por post (DEPRECADO: usar --target-comments)")
+    # NUEVO: Argumentos basados en comentarios
+    parser.add_argument("--target-comments", type=int, default=None, help="Número objetivo de comentarios totales (recomendado: 800)")
+    parser.add_argument("--max-posts", type=int, default=200, help="Máximo de posts a scrapear (límite de seguridad)")
+    
+    args = parser.parse_args()
+    
+    # Defaults para automatización
+    if args.target_comments:
+        # Modo NUEVO: Basado en comentarios
+        if not args.max_posts:
+            args.max_posts = 200  # Límite de seguridad
+        print(f"ℹ️  MODO: Scraping basado en comentarios (Objetivo: {args.target_comments} comentarios)")
+    else:
+        # Modo ANTIGUO: Basado en posts (compatibilidad)
+        if args.query and not args.posts:
+            args.posts = 5
+        if args.query and args.comments is None:
+            args.comments = 2
     
     # Verificar que estamos en Windows (para soporte de colores)
     if os.name == 'nt':
         os.system('color')
     
+    print("\n🎯 Iniciando Master Scraper...")
+    if args.sequential:
+        print("ℹ️  MODO: SECUENCIAL FORZADO")
+    if args.compare:
+        print("ℹ️  MODO: COMPARACIÓN DE RENDIMIENTO (Secuencial vs Paralelo)")
+    
     # Crear instancia del gestor
     manager = SocialMediaScraperManager()
     
-    # Ejecutar scrapers en paralelo
     try:
-        results = manager.run_parallel()
+        results = []
+        
+        if args.compare:
+            print("\n" + "!"*80)
+            print("  FASE 1: EJECUCIÓN SECUENCIAL (LÍNEA BASE)")
+            print("!"*80 + "\n")
+            # Forzar paso de argumentos si existen
+            results_seq, time_seq = manager.run_sequential(query=args.query, posts=args.posts, comments=args.comments, target_comments=args.target_comments, max_posts=args.max_posts)
+            
+            print("\n" + "!"*80)
+            print("  FASE 2: EJECUCIÓN PARALELA (OPTIMIZADA)")
+            print("!"*80 + "\n")
+            results_par, time_par = manager.run_parallel(query=args.query, posts=args.posts, comments=args.comments, target_comments=args.target_comments, max_posts=args.max_posts)
+            
+            # Calcular Speedup Real
+            speedup_real = time_seq / time_par if time_par > 0 else 0
+            
+            print("\n" + "★"*80)
+            print(f"🚀 RESULTADOS DE LA COMPARACIÓN")
+            print("★"*80)
+            print(f"⏱️  Tiempo Secuencial: {time_seq:.2f}s")
+            print(f"⏱️  Tiempo Paralelo:   {time_par:.2f}s")
+            print(f"⚡ SPEEDUP REAL:      {speedup_real:.2f}x")
+            print(f"   (El sistema es {speedup_real:.1f} veces más rápido en paralelo)")
+            print("★"*80 + "\n")
+            
+            results = results_par # Usamos resultados paralelos para validación final
+            
+        elif args.sequential:
+            results, _ = manager.run_sequential(query=args.query, posts=args.posts, comments=args.comments, target_comments=args.target_comments, max_posts=args.max_posts)
+        else:
+            results, _ = manager.run_parallel(query=args.query, posts=args.posts, comments=args.comments, target_comments=args.target_comments, max_posts=args.max_posts)
         
         # Verificar si todos fueron exitosos
         all_success = all(r['status'] == 'success' for r in results)
@@ -771,6 +1223,8 @@ def main():
         return 2
     except Exception as e:
         print(f"\n\n❌ Error crítico: {str(e)}")
+        # import traceback
+        # traceback.print_exc()
         return 3
 
 

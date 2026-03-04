@@ -101,9 +101,11 @@ class XScraper:
 
     async def scrape_search(self, query, count=50):
         """Scrapes tweets for a given search query."""
+        import urllib.parse
         print(f"Searching for: {query}")
         # Search for TOP tweets (most popular/engagement) instead of latest
-        await self.page.goto(f"https://x.com/search?q={query}&src=typed_query")
+        encoded_query = urllib.parse.quote(query)
+        await self.page.goto(f"https://x.com/search?q={encoded_query}&src=typed_query")
         await self._human_sleep(2, 4, probability=1.0)
 
         tweets_data = []
@@ -218,9 +220,24 @@ class XScraper:
                             user_element = await article.query_selector("div[data-testid='User-Name']")
                             user_text = await user_element.inner_text() if user_element else "Unknown"
 
+                            time_element = await article.query_selector("time")
+                            timestamp = await time_element.get_attribute("datetime") if time_element else ""
+                            
+                            comment_url = ""
+                            link_element = await article.query_selector("a[href*='/status/']")
+                            if link_element:
+                                href = await link_element.get_attribute("href")
+                                if href:
+                                    comment_url = f"https://x.com{href}" if not href.startswith("http") else href
+                                    
+                            comment_id = comment_url.split('/')[-1] if comment_url else ''
+
                             comment_obj = {
+                                "comment_id": comment_id,
                                 "author": user_text.replace('\n', ' '),
-                                "text": text.replace('\n', ' ')
+                                "text": text.replace('\n', ' '),
+                                "timestamp": timestamp,
+                                "url": comment_url
                             }
                             
                             # Simple dedup

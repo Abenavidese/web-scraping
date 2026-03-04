@@ -76,13 +76,28 @@ def prepare_sentiment_data_with_processed(df_processed):
         comment_texts = post_comments['text'].tolist()
         
         # Textos procesados (para análisis más limpio)
-        comment_processed = post_comments['processed_text'].tolist()
+        if 'text_clean_semantic' in post_comments.columns:
+            comment_processed = post_comments['text_clean_semantic'].tolist()
+        else:
+            comment_processed = post_comments['text'].tolist()
         
+        comments_list_for_json = []
+        for _, c_row in post_comments.iterrows():
+            comments_list_for_json.append({
+                "comment_id": c_row.get('item_id', ''),
+                "timestamp": c_row.get('timestamp', ''),
+                "text": c_row.get('text', ''),
+                "processed_text": c_row.get('text_clean_semantic', c_row.get('text', '')),
+                "intensity_text": c_row.get('text_clean_intensity', ''),
+                "author": c_row.get('author', '')
+            })
+            
         sentiment_entry = {
             'post_id': post_url.split('/')[-1] if post_url else 'unknown',
             'post_author': post['author'],
             'post_text': post['text'],
-            'post_processed': post['processed_text'],
+            'post_processed': post.get('text_clean_semantic', post['text']),
+            'post_intensity': post.get('text_clean_intensity', ''),
             'post_url': post_url,
             'num_comments': len(comment_texts),
             
@@ -93,7 +108,7 @@ def prepare_sentiment_data_with_processed(df_processed):
             'comments_processed': ' | '.join(comment_processed) if comment_processed else 'No comments',
             
             # JSON estructurado para LLM
-            'comments_json': json.dumps(comment_texts, ensure_ascii=False)
+            'comments_json': json.dumps(comments_list_for_json, ensure_ascii=False)
         }
         
         sentiment_data.append(sentiment_entry)

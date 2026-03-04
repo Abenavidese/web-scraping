@@ -12,7 +12,6 @@ import pandas as pd
 #     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from scraper import XScraper
-from processor import process_data_parallel
 from visualization import generate_wordcloud, plot_top_words
 
 # Load environment variables from .env file
@@ -54,8 +53,13 @@ async def main():
     # ARGUMENT PARSING
     parser = argparse.ArgumentParser(description="X/Twitter Scraper")
     parser.add_argument("--query", type=str, default=None, help="Search topic")
-    parser.add_argument("--posts", type=int, default=None, help="Number of posts to scrape")
-    parser.add_argument("--comments", type=int, default=None, help="Number of comments per post")
+    parser.add_argument("--year", type=int, default=None, help="Year to filter (e.g., 2023)")
+    parser.add_argument("--month", type=int, default=None, help="Month to filter (1-12)")
+    parser.add_argument("--posts", type=int, default=None, help="Number of posts to scrape (old mode)")
+    parser.add_argument("--comments", type=int, default=None, help="Number of comments per post (old mode)")
+    # NEW: Comment-based scraping
+    parser.add_argument("--target-comments", type=int, default=None, help="Target number of total comments (new mode)")
+    parser.add_argument("--max-posts", type=int, default=200, help="Maximum posts to scrape (safety limit)")
     
     args = parser.parse_args()
     
@@ -63,12 +67,42 @@ async def main():
     print("\n--- Configuration ---")
     
     SEARCH_QUERY = args.query if args.query else "Inteligencia Artificial"
-    TWEET_COUNT = args.posts if args.posts is not None else 10
-    COMMENT_COUNT = args.comments if args.comments is not None else 0
     
-    print(f"Search topic: {SEARCH_QUERY}")
-    print(f"Number of posts: {TWEET_COUNT}")
-    print(f"Comments per post: {COMMENT_COUNT}")
+    # Añadir filtro por fecha si se especifica año
+    if args.year:
+        if args.month:
+            import calendar
+            _, last_day = calendar.monthrange(args.year, args.month)
+            since_date = f"{args.year}-{args.month:02d}-01"
+            until_date = f"{args.year}-{args.month:02d}-{last_day}"
+        else:
+            since_date = f"{args.year}-01-01"
+            until_date = f"{args.year}-12-31"
+            
+        SEARCH_QUERY += f" since:{since_date} until:{until_date}"
+        print(f"Date filter applied: {since_date} to {until_date}")
+    
+    # Determine scraping mode
+    if args.target_comments:
+        # NEW MODE: Comment-based scraping
+        TARGET_COMMENTS = args.target_comments
+        MAX_POSTS = args.max_posts
+        TWEET_COUNT = None  # Will scrape until target is reached
+        COMMENT_COUNT = 10  # Default comments per post to try
+        print(f"[MODE] Comment-based scraping")
+        print(f"Search topic: {SEARCH_QUERY}")
+        print(f"Target comments: {TARGET_COMMENTS}")
+        print(f"Max posts (safety): {MAX_POSTS}")
+    else:
+        # OLD MODE: Post-based scraping
+        TWEET_COUNT = args.posts if args.posts is not None else 10
+        COMMENT_COUNT = args.comments if args.comments is not None else 0
+        TARGET_COMMENTS = None
+        MAX_POSTS = TWEET_COUNT
+        print(f"[MODE] Post-based scraping")
+        print(f"Search topic: {SEARCH_QUERY}")
+        print(f"Number of posts: {TWEET_COUNT}")
+        print(f"Comments per post: {COMMENT_COUNT}")
     
     # User system configuration
     user_id = os.getenv("USER_ID", "default")
@@ -90,17 +124,56 @@ async def main():
     await scraper.start()
     
     tweets = []
+    total_comments_collected = 0
+    
     try:
         await scraper.login(USERNAME, PASSWORD)
-        tweets = await scraper.scrape_search(SEARCH_QUERY, count=TWEET_COUNT)
         
-        # Scrape Comments if requested
-        if COMMENT_COUNT > 0 and tweets:
-            print(f"\nExample: Extracting {COMMENT_COUNT} comments for each of the {len(tweets)} tweets...")
-            for i, tweet in enumerate(tweets):
-                print(f"[{i+1}/{len(tweets)}] Getting comments for tweet by {tweet['author']}")
-                comments = await scraper.scrape_comments(tweet.get('url'), max_comments=COMMENT_COUNT)
-                tweet['comments'] = comments
+        if TARGET_COMMENTS:
+            # NEW MODE: Comment-based scraping
+            print(f"\n[STARTING] Comment-based scraping...")
+            print(f"Target: {TARGET_COMMENTS} comments | Max posts: {MAX_POSTS}")
+            
+            posts_scraped = 0
+            while total_comments_collected < TARGET_COMMENTS and posts_scraped < MAX_POSTS:
+                # Scrape more posts (in batches of 10)
+                batch_size = min(10, MAX_POSTS - posts_scraped)
+                new_tweets = await scraper.scrape_search(SEARCH_QUERY, count=batch_size)
+                
+                if not new_tweets:
+                    print(f"[WARNING] No more posts found. Stopping.")
+                    break
+                
+                # Scrape comments for each post
+                for i, tweet in enumerate(new_tweets):
+                    if total_comments_collected >= TARGET_COMMENTS:
+                        break
+                    
+                    print(f"[Post {posts_scraped + i + 1}/{MAX_POSTS}] Getting comments for tweet by {tweet['author']}")
+                    comments = await scraper.scrape_comments(tweet.get('url'), max_comments=COMMENT_COUNT)
+                    tweet['comments'] = comments
+                    total_comments_collected += len(comments)
+                    
+                    print(f"   [PROGRESS] {total_comments_collected}/{TARGET_COMMENTS} comments")
+                
+                tweets.extend(new_tweets)
+                posts_scraped += len(new_tweets)
+                
+                if total_comments_collected >= TARGET_COMMENTS:
+                    print(f"\n[SUCCESS] Target reached! Collected {total_comments_collected} comments from {posts_scraped} posts")
+                    break
+        else:
+            # OLD MODE: Post-based scraping
+            tweets = await scraper.scrape_search(SEARCH_QUERY, count=TWEET_COUNT)
+            
+            # Scrape Comments if requested
+            if COMMENT_COUNT > 0 and tweets:
+                print(f"\nExample: Extracting {COMMENT_COUNT} comments for each of the {len(tweets)} tweets...")
+                for i, tweet in enumerate(tweets):
+                    print(f"[{i+1}/{len(tweets)}] Getting comments for tweet by {tweet['author']}")
+                    comments = await scraper.scrape_comments(tweet.get('url'), max_comments=COMMENT_COUNT)
+                    tweet['comments'] = comments
+                    total_comments_collected += len(comments)
                 
     except Exception as e:
         print(f"An error occurred during scraping: {e}")
@@ -120,22 +193,32 @@ async def main():
     
     # Save Raw Data
     # Flatten data for CSV: main tweet text + comments text
+    import uuid
     flattened_data = []
     for t in tweets:
+        post_url = t.get('url', '')
+        post_id = post_url.split('/')[-1] if post_url else str(uuid.uuid4())[:8]
         # Main tweet
         flattened_data.append({
             "type": "post",
             "author": t.get('author'),
             "text": t.get('text'),
-            "parent_url": t.get('url')
+            "parent_url": post_url,
+            "timestamp": t.get('timestamp'),
+            "item_id": post_id
         })
         # Comments
         for c in t.get('comments', []):
-             flattened_data.append({
+            comment_id = c.get('comment_id')
+            if not comment_id:
+                comment_id = str(uuid.uuid4())[:10]
+            flattened_data.append({
                 "type": "comment",
                 "author": c.get('author'),
                 "text": c.get('text'),
-                "parent_url": t.get('url')
+                "parent_url": post_url,
+                "timestamp": c.get('timestamp'),
+                "item_id": comment_id
             })
 
     df_raw = pd.DataFrame(flattened_data)
@@ -143,13 +226,57 @@ async def main():
     df_raw.to_csv(tweets_raw_path, index=False, encoding='utf-8')
     print(f"Raw data saved to {tweets_raw_path}")
 
-    # 2. Processing (Parallel)
-    # We pass the flattened data to processor
+    # 2. Processing (ETL Phase 2 - Centralized)
     start_processing_time = time.time()
-    print("\nStarting Parallel Processing...")
-    df_processed = process_data_parallel(flattened_data)
+    print("\nStarting Phase 2 ETL Processing...")
+    
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from shared.data_cleaner import ETLProcessor
+    
+    etl = ETLProcessor()
+    # Pass search query as topic keyword for relevance
+    topic_kws = [args.query] if args.query else []
+    
+    # Run the full Phase 2 pipeline
+    df_processed = etl.run_etl_pipeline(df_raw, platform='x', run_id=f"run_x_{int(time.time())}", topic_keywords=topic_kws)
+    
+    # Actively FILTER NOISE to improve dataset quality
+    if 'is_noise' in df_processed.columns:
+        initial_count = len(df_processed)
+        df_processed = df_processed[~df_processed['is_noise']].copy()
+        removed = initial_count - len(df_processed)
+        if removed > 0:
+            print(f"🧹 Noise Filter: Removed {removed} noisy comments (laughs, emojis, <3 words)")
+            
+    # Optional Relevance warning (we don't drop them yet, let LLM decide)
+    if 'is_relevant' in df_processed.columns:
+        irrelevant_count = len(df_processed[~df_processed['is_relevant']])
+        if irrelevant_count > 0:
+            print(f"⚠️  Relevance: {irrelevant_count} items do not contain keywords '{args.query}' (Kept in dataset)")
+    
+    # Save processed to CSV to debug locally
     tweets_processed_path = os.path.join(output_dir, "tweets_processed.csv")
     df_processed.to_csv(tweets_processed_path, index=False, encoding='utf-8')
+    
+    # Save to Parquet as requested in Phase 2
+    staged_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'staged', 'x')
+    os.makedirs(staged_dir, exist_ok=True)
+    
+    # Try to extract a representative year-month for the staged filename
+    if not df_processed.empty:
+        yr = args.year if args.year else df_processed['year'].mode().iloc[0] if 'year' in df_processed.columns and not df_processed['year'].isna().all() else datetime.datetime.now().year
+        mo = args.month if args.month else df_processed['month'].mode().iloc[0] if 'month' in df_processed.columns and not df_processed['month'].isna().all() else datetime.datetime.now().month
+        staged_parquet_path = os.path.join(staged_dir, f"{int(yr)}-{int(mo):02d}.parquet")
+        
+        # We must filter out duplicates and non-spanish for the deep sentiment analysis if strictly academic,
+        # but the prompt says Q1/Q2 filters it. Let's keep it in the dataframe but flag it.
+        # Save full staged dataset
+        try:
+            df_processed.to_parquet(staged_parquet_path, index=False)
+            print(f"✅ Staged Parquet saved to {staged_parquet_path}")
+        except Exception as e:
+            print(f"⚠️ Could not save Parquet (install pyarrow/fastparquet): {e}")
+
     print(f"Processed data saved to {tweets_processed_path}")
     end_processing_time = time.time()
 
@@ -157,49 +284,67 @@ async def main():
     print("\nGenerating Visualizations...")
     
     # --- Create a "More Clean" / Refined Dataset ---
-    df_refined = df_processed[['type', 'text', 'processed_text']].copy()
+    df_refined = df_processed[['type', 'text', 'text_clean_semantic']].copy()
     
     # Basic Length Filter (Noise removal)
-    # df_refined = df_refined[df_refined['processed_text'].str.split().str.len() > 2] # Relaxed filter
+    # df_refined = df_refined[df_refined['text_clean_semantic'].str.split().str.len() > 2] # Relaxed filter
     
     df_refined.to_csv(os.path.join(output_dir, "tweets_refined.csv"), index=False, encoding='utf-8')
     print(f"Refined data saved to {output_dir}/tweets_refined.csv")
     
-    all_text_corpus = ' '.join(df_refined['processed_text'].tolist())
+    # Drop NAs
+    clean_texts = [str(x) for x in df_refined['text_clean_semantic'].tolist() if pd.notna(x)]
+    all_text_corpus = ' '.join(clean_texts)
     
     generate_wordcloud(all_text_corpus, output_path=os.path.join(output_dir, "wordcloud.png"))
-    plot_top_words(df_processed['processed_tokens'], n=20, output_path=os.path.join(output_dir, "frequency_plot.png"))
+    
+    # Re-create tokens for frequency plot
+    df_processed['temp_tokens'] = df_processed['text_clean_semantic'].apply(lambda x: str(x).split() if pd.notna(x) else [])
+    plot_top_words(df_processed['temp_tokens'], n=20, output_path=os.path.join(output_dir, "frequency_plot.png"))
     
     # 4. Sentiment Analysis Preparation
     print("\nPreparing Sentiment Analysis Data...")
-    from sentiment_prep import prepare_sentiment_data_with_processed, generate_llm_prompts_csv
+    from sentiment_prep import prepare_sentiment_data_with_processed
     
     df_sentiment = prepare_sentiment_data_with_processed(df_processed)
     sentiment_input_path = os.path.join(output_dir, "sentiment_input.csv")
     df_sentiment.to_csv(sentiment_input_path, index=False, encoding='utf-8')
     print(f"Sentiment data saved to {sentiment_input_path}")
     
-    # Generate LLM prompts
-    generate_llm_prompts_csv(df_sentiment, output_path=os.path.join(output_dir, "llm_prompts.csv"))
-    
-    # 5. Sentiment Analysis with DeepSeek (Automatic)
+    # 5. Sentiment Analysis with DeepSeek (Automatic & Robust)
     start_sentiment_time = time.time()
-    sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
+    sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
     total_items_analyzed = 0
     
     print("\n" + "="*60)
-    print("Starting Automatic Sentiment Analysis with DeepSeek...")
+    print("Starting Automatic Sentiment Analysis with DeepSeek (Phases 3 & 4)...")
     print("="*60)
     
     try:
-        from sentiment_analyzer import main_sentiment_analysis
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from shared.sentiment_analyzer import DeepSeekSentimentAnalyzer
         
-        # Analizar sentimientos usando la función principal de sentiment_analyzer.py
-        # Esto automáticamente carga .env, inicializa DeepSeek y corre el batch
-        df_results = main_sentiment_analysis(
-            input_csv=sentiment_input_path,
-            output_csv=os.path.join(output_dir, "sentiment_results.csv")
+        analyzer = DeepSeekSentimentAnalyzer()
+        
+        # Inject year/month if available from args for harmonization
+        if args.year and args.month:
+            df_sentiment['year'] = args.year
+            df_sentiment['month'] = args.month
+            
+        # Phase 3: Harmonize Dataset
+        df_harmonized = analyzer.harmonize_dataset(df_sentiment, platform="x", target_per_month=1000)
+        
+        # Phase 4: Process Robustly
+        df_results = analyzer.process_dataset_robustly(
+            df_harmonized, 
+            platform="x", 
+            text_col='post_text', 
+            comments_col='comments_json'
         )
+        
+        # Save results locally for this run
+        results_csv_path = os.path.join(output_dir, "sentiment_results.csv")
+        df_results.to_csv(results_csv_path, index=False, encoding='utf-8')
         
         if df_results is not None and not df_results.empty and 'sentiment' in df_results.columns:
             print(f"\nOptimization: Using centralized DeepSeek Analyzer")
@@ -208,11 +353,25 @@ async def main():
             sentiment_counts = df_results['sentiment'].value_counts()
             
             # Update distribution for final report
-            sentiment_distribution['positive'] = int(sentiment_counts.get('POSITIVE', sentiment_counts.get('positive', 0)))
-            sentiment_distribution['negative'] = int(sentiment_counts.get('NEGATIVE', sentiment_counts.get('negative', 0)))
-            sentiment_distribution['neutral'] = int(sentiment_counts.get('NEUTRAL', sentiment_counts.get('neutral', 0)))
+            sentiment_distribution['positive'] = int(sentiment_counts.get('positive', 0))
+            sentiment_distribution['negative'] = int(sentiment_counts.get('negative', 0))
+            sentiment_distribution['neutral'] = int(sentiment_counts.get('neutral', 0))
+            sentiment_distribution['mixed'] = int(sentiment_counts.get('mixed', 0))
             
             total_items_analyzed = len(df_results)
+            
+            # ✅ NUEVO: Generar CSV unificado en formato de investigación
+            try:
+                from shared.unified_csv_exporter import convert_x_twitter_to_unified
+                
+                unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
+                convert_x_twitter_to_unified(
+                    results_csv_path,
+                    unified_csv_path
+                )
+                print(f"📋 CSV Unificado (Formato Investigación): {unified_csv_path}")
+            except Exception as e:
+                print(f"⚠️  Error generando CSV unificado: {e}")
             
         else:
             print("\nScaling Warning: No results returned from analysis")
@@ -221,7 +380,6 @@ async def main():
         print(f"\nSentiment analysis failed: {e}")
         import traceback
         traceback.print_exc()
-        print("   You can run it manually later with: python sentiment_analyzer.py")
     
     end_sentiment_time = time.time()
     end_total_time = time.time()
