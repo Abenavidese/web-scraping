@@ -3,8 +3,8 @@ import json
 import time
 import random
 import re
+import base64
 from playwright.sync_api import sync_playwright
-from ollama_sentiment import classify_comments_sentiment
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -76,6 +76,8 @@ def run():
     parser.add_argument("--query", type=str, default=None, help="Search topic")
     parser.add_argument("--posts", type=int, default=None, help="Number of posts to scrape")
     parser.add_argument("--comments", type=int, default=None, help="Number of comments per post")
+    parser.add_argument("--year", type=int, default=None, help="Year to filter (e.g., 2023)")
+    parser.add_argument("--month", type=int, default=None, help="Month to filter (1-12)")
     
     args = parser.parse_args()
     
@@ -85,6 +87,8 @@ def run():
     num_comments_to_scrape = args.comments if args.comments is not None else 5
     
     print(f"Search topic: {search_query}")
+    if args.year and args.month:
+        print(f"Date filter applied: {args.year}-{args.month:02d}")
     print(f"Number of posts: {num_posts_to_scrape}")
     print(f"Comments per post: {num_comments_to_scrape}")
 
@@ -143,11 +147,48 @@ def run():
 
         sleep_largo()
 
-        # Search
         print(f"Searching for '{search_query}'...")
+        # Verificar si Facebook pide seleccionar cuenta o contraseña antes de buscar
+        try:
+            # Check for common login elements or account chooser
+            if (page.locator('input[type="password"]').is_visible(timeout=3000) or 
+                page.locator('button[name="login"]').is_visible() or 
+                page.get_by_text("Log In").is_visible() or 
+                page.get_by_text("Iniciar sesión").is_visible() or 
+                "login" in page.url):
+                
+                print("\n" + "="*50)
+                print("🛑 Facebook requiere seleccionar tu cuenta o ingresar tu contraseña.")
+                print("Por favor, ve a la ventana del navegador que se abrió y completa el inicio de sesión.")
+                print("="*50)
+                input(">>> Presiona ENTER aquí en la consola CUANDO VEAS TU FEED/MURO para continuar... ")
+                
+                # Guardar el nuevo estado autenticado para futuras ejecuciones
+                context.storage_state(path="auth_fb.json")
+                print("✅ Sesión actualizada exitosamente.")
+        except Exception as e:
+            # Ignorar timeouts si no encuentra los elementos (significa que ya está logueado)
+            pass
+
         # Direct navigation to search results for posts
         # URL format: https://www.facebook.com/search/posts/?q=query
         search_url = f"https://www.facebook.com/search/posts/?q={search_query}"
+        
+        # Inyectar filtro por fecha si se especifica
+        if args.year and args.month:
+            year_str = str(args.year)
+            month_str = f"{args.year}-{args.month:02d}"
+            
+            # El JSON filter string que requiere Facebook:
+            filter_json = {
+                "rp_creation_time": f'{{"name":"creation_time","args":"{{\\"start_year\\":\\"{year_str}\\",\\"start_month\\":\\"{month_str}\\",\\"end_year\\":\\"{year_str}\\",\\"end_month\\":\\"{month_str}\\"}}"}}'
+            }
+            # Codificarlo a Base64
+            encoded_filter = base64.b64encode(json.dumps(filter_json).replace(' ', '').encode('utf-8')).decode('utf-8')
+            search_url += f"&filters={encoded_filter}"
+            
+            print(f"Applying Date Filter Logic -> {search_url}")
+            
         page.goto(search_url)
         sleep_largo()
         
@@ -539,252 +580,189 @@ def run():
         print(f"Data saved to {filename}")
         
         browser.close()
+        # --- Post-Processing (Phase 2 - Unified ETL) ---
+        print("\n--- Starting Phase 2 ETL Processing ---")
+        start_processing_time = time.time()
+        import uuid
+        import pandas as pd
+        import sys
+        import datetime
         
-        # --- Post-Processing Sentiment Analysis ---
-        print("\n--- Starting Post-Processing Sentiment Analysis (Decoupled) ---")
+        # Add shared path
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from shared.data_cleaner import ETLProcessor
+        from x_scrapper.sentiment_prep import prepare_sentiment_data_with_processed
+        
+        # Flatten data for ETL
+        flattened_data = []
+        for p in posts_data:
+            post_url = p.get('post_url', '')
+            post_id = post_url.split('/')[-1] if post_url and post_url != "N/A" else str(uuid.uuid4())[:8]
+            
+            # Use current month/year for Facebook dates since it doesn't give timestamps easily
+            fb_year = args.year if args.year else datetime.datetime.now().year
+            fb_month = args.month if args.month else datetime.datetime.now().month
+            fb_ts = f"{fb_year}-{fb_month:02d}-15T12:00:00.000Z"
+            
+            # Post
+            flattened_data.append({
+                "type": "post",
+                "author": "FB User",
+                "text": p.get('caption_snippet', ''),
+                "parent_url": post_url,
+                "timestamp": fb_ts,
+                "item_id": post_id
+            })
+            
+            # Comments
+            for c in p.get('comments', []):
+                comment_id = str(uuid.uuid4())[:10]
+                flattened_data.append({
+                    "type": "comment",
+                    "author": c.get('user', 'FB User'),
+                    "text": c.get('text', ''),
+                    "parent_url": post_url,
+                    "timestamp": fb_ts,
+                    "item_id": comment_id
+                })
+                
+        df_raw = pd.DataFrame(flattened_data)
+        
+        etl = ETLProcessor()
+        topic_kws = [search_query] if search_query else []
+        df_processed = etl.run_etl_pipeline(df_raw, platform='facebook', run_id=f"run_fb_{int(time.time())}", topic_keywords=topic_kws)
+        
+        # Filter noise
+        if 'is_noise' in df_processed.columns:
+            initial_count = len(df_processed)
+            df_processed = df_processed[~df_processed['is_noise']].copy()
+            removed = initial_count - len(df_processed)
+            if removed > 0:
+                print(f"🧹 Noise Filter: Removed {removed} noisy comments (laughs, emojis, <3 words)")
+                
+        # Save Parquet Phase 2
+        staged_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'staged', 'facebook')
+        os.makedirs(staged_dir, exist_ok=True)
+        try:
+            yr = args.year if args.year else df_processed['year'].mode().iloc[0] if 'year' in df_processed.columns and not df_processed['year'].isna().all() else datetime.datetime.now().year
+            mo = args.month if args.month else df_processed['month'].mode().iloc[0] if 'month' in df_processed.columns and not df_processed['month'].isna().all() else datetime.datetime.now().month
+            staged_parquet = os.path.join(staged_dir, f"{int(yr)}-{int(mo):02d}.parquet")
+            df_processed.to_parquet(staged_parquet, index=False)
+            print(f"✅ Staged Parquet saved to {staged_parquet}")
+        except Exception as e:
+            pass
+
+        df_sentiment = prepare_sentiment_data_with_processed(df_processed)
+        df_sentiment.to_csv(os.path.join(output_dir, "sentiment_input.csv"), index=False, encoding='utf-8')
+        end_processing_time = time.time()
+        
+        # --- DeepSeek Sentiment Analysis (Phases 3 & 4) ---
         start_sentiment_time = time.time()
+        sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
+        total_items_analyzed = 0
         
-        # First, analyze post captions
-        if posts_data:
-            print(f"\nAnalyzing sentiments for {len(posts_data)} post captions...")
-            post_captions = [post.get("caption_snippet", "") for post in posts_data]
-            try:
-                post_sentiment_results = classify_comments_sentiment(post_captions, None, batch_size=15)
-                for i, post in enumerate(posts_data):
-                    if i < len(post_sentiment_results):
-                        result = post_sentiment_results[i]
-                        if isinstance(result, dict):
-                            post["sentiment"] = result.get("sentiment", "NEUTRAL")
-                            post["sentiment_reasoning"] = result.get("reasoning", "Sin explicación")
-                        else:
-                            post["sentiment"] = result
-                            post["sentiment_reasoning"] = "Sin explicación disponible"
-                    else:
-                        post["sentiment"] = "NEUTRAL"
-                        post["sentiment_reasoning"] = "No analizado"
-                print("✅ Post sentiment analysis complete.")
-            except Exception as e:
-                print(f"Error during post sentiment analysis: {e}")
-                # If analysis fails, set defaults
-                for post in posts_data:
-                    post["sentiment"] = "NEUTRAL"
-                    post["sentiment_reasoning"] = "Error en análisis"
+        print("\n" + "="*60)
+        print("Starting Automatic Sentiment Analysis with DeepSeek (Phases 3 & 4)...")
+        print("="*60)
         
-        # Then analyze comments
-        all_comments_texts = []
-        for post in posts_data:
-            for comment in post.get("comments", []):
-                all_comments_texts.append(comment.get("text", ""))
-        
-        if all_comments_texts:
-            print(f"Classifying {len(all_comments_texts)} comments with Ollama (with explainability)...")
-            try:
-                # classify_comments_sentiment ahora retorna lista de dicts con 'sentiment' y 'reasoning'
-                sentiment_results = classify_comments_sentiment(all_comments_texts, None, batch_size=15)
-                global_idx = 0
-                for post in posts_data:
-                    for comment in post.get("comments", []):
-                        if global_idx < len(sentiment_results):
-                            result = sentiment_results[global_idx]
-                            
-                            # Manejar tanto formato nuevo (dict) como antiguo (string)
-                            if isinstance(result, dict):
-                                comment["sentiment"] = result.get("sentiment", "NEUTRAL")
-                                comment["sentiment_reasoning"] = result.get("reasoning", "Sin explicación")
-                            else:
-                                # Fallback para compatibilidad con formato antiguo
-                                comment["sentiment"] = result
-                                comment["sentiment_reasoning"] = "Sin explicación disponible"
-                        else:
-                            comment["sentiment"] = "NEUTRAL"
-                            comment["sentiment_reasoning"] = "No analizado"
-                        global_idx += 1
-                print("✅ Comment sentiment analysis complete.")
-            except Exception as e:
-                print(f"Error during comment sentiment analysis: {e}")
-        
-        # Update JSON
-        with open(filename, "w", encoding="utf-8") as f:
-             json.dump(posts_data, f, indent=4, ensure_ascii=False)
-        print(f"Updated JSON with sentiments and reasoning: {filename}")
+        try:
+            from shared.sentiment_analyzer import DeepSeekSentimentAnalyzer
+            analyzer = DeepSeekSentimentAnalyzer()
+            
+            # Harmonize (Phase 3)
+            df_harmonized = analyzer.harmonize_dataset(df_sentiment, platform="facebook", target_per_month=1000)
+            
+            # Robust Process (Phase 4)
+            df_results = analyzer.process_dataset_robustly(
+                df_harmonized,
+                platform="facebook",
+                text_col='post_text',
+                comments_col='comments_json'
+            )
+            
+            results_csv_path = os.path.join(output_dir, "sentiment_results.csv")
+            df_results.to_csv(results_csv_path, index=False, encoding='utf-8')
+            
+            if df_results is not None and not df_results.empty and 'sentiment' in df_results.columns:
+                sentiment_counts = df_results['sentiment'].value_counts()
+                sentiment_distribution['positive'] = int(sentiment_counts.get('positive', 0))
+                sentiment_distribution['negative'] = int(sentiment_counts.get('negative', 0))
+                sentiment_distribution['neutral'] = int(sentiment_counts.get('neutral', 0))
+                sentiment_distribution['mixed'] = int(sentiment_counts.get('mixed', 0))
+                
+                total_items_analyzed = len(df_results)
+                
+                # FINAL EXPORT (Unified Format)
+                from shared.unified_csv_exporter import convert_facebook_to_unified
+                unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
+                convert_facebook_to_unified(results_csv_path, unified_csv_path)
+                print(f"📋 CSV Unificado (Formato Investigación): {unified_csv_path}")
+                
+        except Exception as e:
+            print(f"\nSentiment analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
+            
         end_sentiment_time = time.time()
         
-        # --- CSV Generation ---
-        import csv
-        print("Saving separated sentiment CSVs...")
-        sentiments_lists = { "positivos": [], "negativos": [], "neutros": [] }
+        # --- Metrics ---
+        end_total_time = time.time()
+        scraping_duration = end_scraping_time - start_scraping_time
+        processing_duration = end_processing_time - start_processing_time
+        sentiment_duration = end_sentiment_time - start_sentiment_time
+        total_duration = end_total_time - start_total_time
         
-        for post in posts_data:
-            p_url = post.get("post_url", "N/A")
-            for comment in post.get("comments", []):
-                s = comment.get("sentiment", "NEUTRAL").upper()
-                c_text = comment.get("text", "")
-                
-                if s == "POSITIVO":
-                    sentiments_lists["positivos"].append([c_text, p_url])
-                elif s == "NEGATIVO":
-                    sentiments_lists["negativos"].append([c_text, p_url])
-                else:
-                    sentiments_lists["neutros"].append([c_text, p_url])
-                    
-        for s_type, rows in sentiments_lists.items():
-            csv_name = os.path.join(output_dir, f"comentarios_{s_type}_{search_query}.csv")
-            try:
-                with open(csv_name, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["Comentario", "URL Post Original"])
-                    writer.writerows(rows)
-                print(f"  Saved {len(rows)} {s_type} comments to: {csv_name}")
-            except Exception as e:
-                print(f"  Error saving {s_type} CSV: {e}")
+        total_tweets = len(posts_data)
+        total_comments = sum(len(p.get('comments', [])) for p in posts_data)
+        total_items = total_tweets + total_comments
         
-        # --- Generate Posts CSV with Sentiment (for import) ---
-        print("\n--- Generating Posts CSV with Sentiment ---")
-        posts_csv_name = os.path.join(output_dir, f"datos_extraidos_deepseek.csv")
-        try:
-            with open(posts_csv_name, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["source", "title", "content", "comments", "sentiment_deepseek", "explanation_deepseek"])
-                
-                for post in posts_data:
-                    source = "facebook"
-                    title = post.get("post_url", "N/A")
-                    content = post.get("caption_snippet", "")
-                    comments_json = json.dumps(post.get("comments", []), ensure_ascii=False)
-                    sentiment = post.get("sentiment", "NEUTRAL")
-                    explanation = post.get("sentiment_reasoning", "Sin explicación")
-                    
-                    writer.writerow([source, title, content, comments_json, sentiment, explanation])
-            
-            print(f"✅ Saved {len(posts_data)} posts with sentiment to: {posts_csv_name}")
-            
-            # ✅ NUEVO: Generar CSV unificado en formato de investigación
-            try:
-                import sys
-                sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                from shared.unified_csv_exporter import convert_facebook_to_unified
-                
-                unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
-                convert_facebook_to_unified(posts_csv_name, unified_csv_path)
-                print(f"📋 CSV Unificado (Formato Investigación): {unified_csv_path}")
-            except Exception as e:
-                print(f"⚠️  Error generando CSV unificado: {e}")
-                
-        except Exception as e:
-            print(f"❌ Error saving posts CSV: {e}")
+        print("\n" + "="*50)
+        print(f"       PERFORMANCE REPORT: {search_query.upper()}")
+        print("="*50)
+        print(f"Total Posts Extracted: {total_tweets}")
+        print(f"Total Comments:         {total_comments}")
+        print(f"Items Analyzed:         {total_items_analyzed}")
+        print("-" * 50)
+        print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
+        print(f"2. Text Processing:     {processing_duration:.2f} seconds")
+        print(f"3. Sentiment Analysis:  {sentiment_duration:.2f} seconds (DeepSeek)")
+        print("-" * 50)
+        print(f"TOTAL EXECUTION TIME:   {total_duration:.2f} seconds")
+        print("="*50)
         
-        # --- Automatic Processing ---
-        try:
-            print("\n--- Starting Automatic Text Processing ---")
-            import procesamiento_texto
-            
-            datos_nuevos = procesamiento_texto.cargar_datos_json(filename)
-            tokens_limpios, tokens_stemmed = procesamiento_texto.procesar_texto(datos_nuevos)
-            
-            print(f"Processed {len(datos_nuevos)} new posts.")
-            
-            # Save JSON processed to Resultados folder
-            processed_filename = os.path.join(output_dir, f"processed_facebook_{search_query}.json")
-            processed_data = {
-                "search_query": search_query,
-                "total_posts": len(datos_nuevos),
-                "tokens_limpios": tokens_limpios,
-                "tokens_stemmed": tokens_stemmed
+        metrics = {
+            "social_network": "Facebook",
+            "llm_used": "DeepSeek",
+            "query": search_query,
+            "execution_times": {
+                "scraping": round(scraping_duration, 2),
+                "text_processing": round(processing_duration, 2),
+                "sentiment_analysis": round(sentiment_duration, 2),
+                "total": round(total_duration, 2)
+            },
+            "data_metrics": {
+                "posts_extracted": total_tweets,
+                "comments_extracted": total_comments,
+                "comments_analyzed": total_items_analyzed,
+                "total_text_items": total_items
+            },
+            "sentiment_distribution": sentiment_distribution,
+            "performance_metrics": {
+                "posts_per_second": round(total_tweets / scraping_duration if scraping_duration > 0 else 0, 2),
+                "comments_per_second": round(total_items_analyzed / sentiment_duration if sentiment_duration > 0 else 0, 2),
+                "avg_time_per_post": round(scraping_duration / total_tweets if total_tweets > 0 else 0, 2)
             }
-            with open(processed_filename, "w", encoding="utf-8") as f:
-                json.dump(processed_data, f, indent=4, ensure_ascii=False)
-            print(f"Processed text saved to: {processed_filename}")
-            
-            # Save CSV processed to Resultados folder
-            import csv
-            csv_filename = os.path.join(output_dir, f"processed_facebook_{search_query}.csv")
-            with open(csv_filename, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["Type", "Token"])
-                for token in tokens_limpios:
-                    writer.writerow(["Limpio", token])
-                for token in tokens_stemmed:
-                    writer.writerow(["Stemmed", token])
-            print(f"Processed text saved to: {csv_filename}")
-            
-            # Visualize to Resultados folder
-            output_img = os.path.join(output_dir, f"frecuencia_facebook_{search_query}.png")
-            procesamiento_texto.visualizar_nube_palabras(tokens_limpios, output_img)
-            print(f"Analysis complete. Image saved to: {output_img}")
-            
-            end_total_time = time.time()
-            
-            # --- FINAL PERFORMANCE REPORT ---
-            scraping_duration = end_scraping_time - start_scraping_time
-            sentiment_duration = end_sentiment_time - start_sentiment_time
-            text_processing_duration = end_total_time - end_sentiment_time
-            total_duration = end_total_time - start_total_time
-            
-            # Calculate sentiment distribution
-            sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
-            for post in posts_data:
-                for comment in post.get("comments", []):
-                    s = comment.get("sentiment", "NEUTRAL").upper()
-                    if s == "POSITIVO" or s == "POSITIVE":
-                        sentiment_distribution["positive"] += 1
-                    elif s == "NEGATIVO" or s == "NEGATIVE":
-                        sentiment_distribution["negative"] += 1
-                    else:
-                        sentiment_distribution["neutral"] += 1
-            
-            print("\n" + "="*50)
-            print(f"       PERFORMANCE REPORT: {search_query.upper()}")
-            print("="*50)
-            print(f"Total Valid Posts:      {len(datos_nuevos)}")
-            print(f"Total Comments Analyzed:{len(all_comments_texts)}")
-            print("-" * 50)
-            print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
-            print(f"   (Avg per post:       {scraping_duration/len(datos_nuevos) if len(datos_nuevos) else 0:.2f}s)")
-            print(f"2. Sentiment Analysis:  {sentiment_duration:.2f} seconds (DeepSeek)")
-            print(f"   (Avg per comment:    {sentiment_duration/len(all_comments_texts) if all_comments_texts else 0:.2f}s)")
-            print(f"3. Text Processing:     {text_processing_duration:.2f} seconds")
-            print("-" * 50)
-            print(f"TOTAL EXECUTION TIME:   {total_duration:.2f} seconds")
-            print("="*50)
-            
-            # Generate metrics JSON for master scraper
-            metrics = {
-                "social_network": "Facebook",
-                "llm_used": "DeepSeek",
-                "query": search_query,
-                "execution_times": {
-                    "scraping": round(scraping_duration, 2),
-                    "sentiment_analysis": round(sentiment_duration, 2),
-                    "text_processing": round(text_processing_duration, 2),
-                    "total": round(total_duration, 2)
-                },
-                "data_metrics": {
-                    "posts_extracted": len(datos_nuevos),
-                    "comments_extracted": len(all_comments_texts),
-                    "comments_analyzed": len(all_comments_texts),
-                    "total_text_items": len(datos_nuevos) + len(all_comments_texts)
-                },
-                "sentiment_distribution": sentiment_distribution,
-                "performance_metrics": {
-                    "posts_per_second": round(len(datos_nuevos) / scraping_duration if scraping_duration > 0 else 0, 2),
-                    "comments_per_second": round(len(all_comments_texts) / sentiment_duration if sentiment_duration > 0 else 0, 2),
-                    "avg_time_per_post": round(scraping_duration / len(datos_nuevos) if len(datos_nuevos) > 0 else 0, 2)
-                }
-            }
-            
-            # Save metrics JSON
-            metrics_filename = os.path.join(output_dir, "metrics.json")
-            with open(metrics_filename, "w", encoding="utf-8") as f:
-                json.dump(metrics, f, indent=4, ensure_ascii=False)
-            print(f"\n📊 Metrics saved to: {metrics_filename}")
-            
-            # Print metrics in JSON format for master scraper to capture
-            print("\n### METRICS_JSON_START ###")
-            print(json.dumps(metrics, ensure_ascii=False))
-            print("### METRICS_JSON_END ###")
-            
-        except Exception as e:
-            print(f"Error during text processing: {e}")
+        }
+        
+        metrics_filename = os.path.join(output_dir, "metrics.json")
+        with open(metrics_filename, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=4, ensure_ascii=False)
+        print(f"\n📊 Metrics saved to: {metrics_filename}")
+        
+        # Print metrics in JSON format for master scraper to capture
+        print("\n### METRICS_JSON_START ###")
+        print(json.dumps(metrics, ensure_ascii=False))
+        print("### METRICS_JSON_END ###")
 
 if __name__ == "__main__":
     run()
