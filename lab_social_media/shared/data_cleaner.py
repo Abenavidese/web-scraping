@@ -353,9 +353,18 @@ class ETLProcessor:
             rel_list.append(is_rel)
             
         # Merge lists into DataFrame
-        feats_df = pd.DataFrame(features_list)
-        for col in feats_df.columns:
-            df[col] = feats_df[col]
+        if len(features_list) > 0:
+            feats_df = pd.DataFrame(features_list)
+            for col in feats_df.columns:
+                df[col] = feats_df[col]
+        else:
+            df['len_chars'] = []
+            df['len_tokens'] = []
+            df['caps_ratio'] = []
+            df['num_emojis'] = []
+            df['num_urls'] = []
+            df['num_mentions'] = []
+            df['num_hashtags'] = []
             
         df['text_clean_semantic'] = clean_semantic_list
         df['text_clean_intensity'] = clean_intensity_list
@@ -365,16 +374,16 @@ class ETLProcessor:
         df['is_relevant'] = rel_list
         
         # Calculate Quality Metrics
-        n_after_lang_filter = len(df[(~df['is_duplicate']) & (df['language'] == 'es')])
-        n_after_spam = len(df[(~df['is_duplicate']) & (df['language'] == 'es') & (~df['is_spam'])])
-        n_after_noise = len(df[(~df['is_duplicate']) & (df['language'] == 'es') & (~df['is_spam']) & (~df['is_noise'])])
+        n_after_lang_filter = len(df[(~df['is_duplicate']) & (df['language'] == 'es')]) if n_raw > 0 else 0
+        n_after_spam = len(df[(~df['is_duplicate']) & (df['language'] == 'es') & (~df['is_spam'])]) if n_raw > 0 else 0
+        n_after_noise = len(df[(~df['is_duplicate']) & (df['language'] == 'es') & (~df['is_spam']) & (~df['is_noise'])]) if n_raw > 0 else 0
         
         perc_dupes = (n_raw - n_after_dedupe) / n_raw * 100 if n_raw > 0 else 0
         perc_non_es = len(df[df['language'] != 'es']) / n_raw * 100 if n_raw > 0 else 0
         perc_spam = len(df[df['is_spam']]) / n_raw * 100 if n_raw > 0 else 0
         perc_noise = len(df[df['is_noise']]) / n_raw * 100 if n_raw > 0 else 0
         
-        median_len_tokens = df['len_tokens'].median()
+        median_len_tokens = df['len_tokens'].median() if n_raw > 0 and len(df['len_tokens']) > 0 else 0.0
         
         report_row = {
             'run_id': run_id,
@@ -384,6 +393,7 @@ class ETLProcessor:
             'N_after_dedupe': n_after_dedupe,
             'N_after_lang_filter': n_after_lang_filter,
             'N_after_spam_filter': n_after_spam,
+
             'N_after_noise_filter': n_after_noise,
             'percent_duplicates': round(perc_dupes, 2),
             'percent_non_es': round(perc_non_es, 2),

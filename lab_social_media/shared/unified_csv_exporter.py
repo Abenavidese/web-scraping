@@ -167,23 +167,45 @@ def convert_x_twitter_to_unified(sentiment_results_csv, output_csv):
 
 def convert_instagram_to_unified(sentiment_results_csv, output_csv):
     """
-    Convierte el CSV de Instagram al formato unificado
+    Convierte el CSV unificado de Instagram al formato de investigación final.
     """
     df = pd.read_csv(sentiment_results_csv, encoding='utf-8')
     unified_data = []
     
     for _, row in df.iterrows():
-        caption = row.get('caption_snippet', row.get('text', ''))
-        processed = row.get('clean_text', row.get('processed_text', ''))
-        sentiment = row.get('sentiment', row.get('sentiment_deepseek', 'neutral'))
-        reasoning = row.get('sentiment_reasoning', row.get('explanation_deepseek', ''))
+        # Tratamiento unificado (Fase 4 aplanada)
+        sentiment = row.get('sentiment', 'neutral')
+        emotion = row.get('emotion', 'none')
+        intensity = row.get('intensity', 'none')
+        confidence = row.get('confidence', 0.0)
         
+        # Identificadores unificados generados por el ETL
+        item_id = str(row.get('item_id', row.get('comment_id', '')))
+        timestamp = str(row.get('timestamp', ''))
+        year = str(row.get('year', ''))
+        month = str(row.get('month', ''))
+        
+        # Asegurar timestamp forzado
+        if timestamp.lower() == 'nan' or not timestamp.strip():
+            clean_year = year if year and year.lower() != 'nan' else '2023'
+            clean_month = month.zfill(2) if month and month.lower() != 'nan' else '01'
+            timestamp = f"{clean_year}-{clean_month}-15T12:00:00.000Z"
+        
+        # Fallback de limpieza  
+        text_col = row.get('text_clean_semantic', row.get('text', ''))
+        if pd.isna(text_col) or str(text_col).strip() == '':
+             text_col = row.get('post_processed', row.get('post_text', ''))
+
         unified_data.append({
-            'publicacion': caption,
-            'comentario': caption,
+            'comment_id': item_id,
+            'timestamp': timestamp,
+            'year': year,
+            'month': month,
+            'comentario': text_col,
             'sentimiento': sentiment,
-            'explicacion': reasoning,
-            'terminos': extract_key_terms(processed)
+            'emocion': emotion,
+            'intensidad': intensity,
+            'confianza': confidence
         })
     
     return create_unified_csv(unified_data, 'Instagram', output_csv)

@@ -57,6 +57,8 @@ def run(search_query=None, num_posts=None, num_comments=None):
     parser.add_argument("--query", type=str, default="python", help="Término de búsqueda")
     parser.add_argument("--posts", type=int, default=5, help="Número de posts a extraer")
     parser.add_argument("--comments", type=int, default=5, help="Número de comentarios por post")
+    parser.add_argument("--year", type=int, default=None, help="Año para el filtro (proxy estático en IG)")
+    parser.add_argument("--month", type=int, default=None, help="Mes para el filtro (proxy estático en IG)")
     
     args = parser.parse_args()
     
@@ -65,6 +67,8 @@ def run(search_query=None, num_posts=None, num_comments=None):
     num_comments_to_scrape = args.comments
     
     print(f"Search topic: {search_query}")
+    if args.year and args.month:
+        print(f"Date applied (Proxy for DB normalization): {args.year}-{args.month:02d}")
     print(f"Number of posts: {num_posts_to_scrape}")
     print(f"Comments per post: {num_comments_to_scrape}")
 
@@ -103,294 +107,439 @@ def run(search_query=None, num_posts=None, num_comments=None):
         print("Navigating to Instagram...")
         page.goto("https://www.instagram.com/")
         smart_sleep(2, 3, probability=1.0)  # Always wait for initial load
-        
-        # Search functionality
-        print(f"Searching for '{search_query}'...")
-        
-        # Format hashtag for multi-word queries
-        formatted_query = format_hashtag(search_query)
-        print(f"Formatted hashtag: #{formatted_query}")
-        
-        # Click search icon (SVG or aria-label) - Instagram UI changes frequently, so we try a few strategies or go directly to URL
-        # Strategy A: Go directly to explore/tags
-        tag_url = f"https://www.instagram.com/explore/tags/{formatted_query}/"
-        print(f"Direct navigation to: {tag_url}")
-        page.goto(tag_url)
-        smart_sleep(2, 4, probability=1.0)  # Always wait for search results
-        
-        # Check if login failed or page didn't load
-        if "login" in page.url:
-            print("Redirected to login page. Session might be invalid or expired.")
-            return
-
-        # Extract data with automatic scrolling
-        posts_data = []
-        
-        print("Extracting posts with automatic scrolling...")
-        
-        # Process posts based on user input
-        count = 0
+        # Custom Search Strategy based on Exact Dates (Google Dorks)
         unique_links = set()
+        
+        if args.year and args.month:
+            print(f"Applying strict Date Filter via Google Dorks ({args.year}-{args.month:02d})...")
+            # Google Search Dork for Instagram
+            dork_query = f"site:instagram.com/p/ \"{search_query}\""
+            import urllib.parse
+            import calendar
+            
+            # Get last day of month
+            _, last_day = calendar.monthrange(args.year, args.month)
+            
+            # Format: mm/dd/yyyy
+            min_date = f"{args.month}/1/{args.year}"
+            max_date = f"{args.month}/{last_day}/{args.year}"
+            
+            # tbs=cdr:1,cd_min:3/1/2023,cd_max:3/31/2023
+            tbs_param = f"cdr:1,cd_min:{min_date},cd_max:{max_date}"
+            
+            google_url = f"https://www.google.com/search?q={urllib.parse.quote(dork_query)}&tbs={urllib.parse.quote(tbs_param)}"
+            print(f"Executing Dork: {google_url}")
+            
+            page.goto(google_url)
+            smart_sleep(2, 4, probability=1.0)
+            
+            print("\n⚠️  [INTERVENCIÓN REQUERIDA] \nEs muy probable que Google haya lanzado un CAPTCHA.")
+            print("1. Revisa la ventana del navegador (Microsoft Edge).")
+            print("2. Resuelve el Captcha si existe.")
+            input("3. Presiona [ENTER] aquí en la consola CUANDO HAYAS TERMINADO y la página de resultados sea visible...")
+            
+            # Extract links from Google Search results
+            page_idx = 0
+            while len(unique_links) < num_posts_to_scrape and page_idx < 5: # Max 5 pages
+                # Wait for Google results to render
+                try:
+                    page.wait_for_selector("div#search a", timeout=5000)
+                except:
+                    print("Could not find standard Google search results. Check CAPTCHA or blocking.")
+                    break
+                    
+                links = page.locator("div#search a[href*='instagram.com/p/']")
+                for i in range(links.count()):
+                    href = links.nth(i).get_attribute('href')
+                    if href and 'instagram.com/p/' in href and not 'google.com' in href.lower() and href.startswith('http'):
+                        # Clean tracking parameters
+                        clean_url = href.split('?')[0]
+                        unique_links.add(clean_url)
+                        if len(unique_links) >= num_posts_to_scrape:
+                            break
+                
+                if len(unique_links) < num_posts_to_scrape:
+                    # Try to go to next page
+                    try:
+                        next_btn = page.locator("a#pnnext")
+                        if next_btn.count() > 0:
+                            next_btn.click()
+                            smart_sleep(2, 4, probability=1.0)
+                            page_idx += 1
+                        else:
+                            break
+                    except:
+                        break
+            
+            print(f"Google Dorking found {len(unique_links)} strict dated links.")
+            
+        else:
+            # Traditional Search functionality without exact dates
+            print(f"Searching for '{search_query}' (No exact date specified)...")
+            formatted_query = format_hashtag(search_query)
+            print(f"Formatted hashtag: #{formatted_query}")
+            
+            tag_url = f"https://www.instagram.com/explore/tags/{formatted_query}/"
+            print(f"Direct navigation to: {tag_url}")
+            page.goto(tag_url)
+            smart_sleep(2, 4, probability=1.0)  
+            
+            if "login" in page.url:
+                print("Redirected to login page. Session might be invalid or expired.")
+                return
+
+        # Extract data
+        posts_data = []
+        count = 0
         processed_indices = set()
         
-        # Scroll and load more posts dynamically
-        max_scroll_attempts = 30  # Prevent infinite scrolling
+        # FIX: Define scroll variables universally so Branch 1 doesn't crash Branch 2 logic later
+        max_scroll_attempts = 30
         scroll_attempt = 0
         no_new_posts_count = 0
         
         print(f"Target: {num_posts_to_scrape} posts")
         
-        while count < num_posts_to_scrape and scroll_attempt < max_scroll_attempts:
-            # Get current post count
-            thumbnails = page.locator('a[href^=\"/p/\"]')
-            count_found = thumbnails.count()
-            
-            if scroll_attempt == 0:
-                print(f"Initially detected {count_found} posts on page")
-            
-            # Process new posts
-            new_posts_found = False
-            for i in range(count_found):
-                if count >= num_posts_to_scrape:
-                    break
-                
-                # Skip already processed posts
-                if i in processed_indices:
-                    continue
-                    
+        # Branch 1: We already have precise links (From Google)
+        if args.year and args.month:
+            for url in list(unique_links)[:num_posts_to_scrape]:
                 try:
-                    # Re-locate to avoid stale element errors
-                    thumbnail = thumbnails.nth(i)
-                    
-                    # Get URL to check for duplicates
-                    post_url_suffix = thumbnail.get_attribute("href")
-                    if not post_url_suffix or post_url_suffix in unique_links:
-                        processed_indices.add(i)
-                        continue
-                    
-                    unique_links.add(post_url_suffix)
-                    processed_indices.add(i)
-                    new_posts_found = True
-                    
-                    print(f"Processing post {count + 1}/{num_posts_to_scrape}...")
-                    
-                    # Scroll into view
-                    thumbnail.scroll_into_view_if_needed()
-                    smart_sleep(0.5, 1, probability=0.3)
-                    
-                    full_url = f"https://www.instagram.com{post_url_suffix}"
-                    
-                    # Click to open modal
-                    thumbnail.click()
+                    print(f"Processing dated post {count + 1}/{len(unique_links)}: {url}")
+                    page.goto(url)
                     smart_sleep(2, 3, probability=1.0)
                     
-                    # Extract Data from Modal
+                    # Wait for image rendering
                     try:
-                        modal_img = page.locator('article img').nth(0)
+                        page.wait_for_selector('img', timeout=5000)
+                        modal_img = page.locator('img').nth(0)
                         image_url = modal_img.get_attribute("src")
                         caption_alt = modal_img.get_attribute("alt")
                     except:
                         image_url = "N/A"
                         caption_alt = "N/A"
-                    
-                    # Extract comments
-                    print("  Extracting comments...")
+                        
+                    # Extract comments via Text Layout Parsing
+                    print("  Extracting comments via Text Parsing...")
                     comments_list = []
                     try:
-                        page.wait_for_selector('article ul', timeout=5000)
-                        comment_elements = page.locator('article ul li')
+                        import re
+                        page.wait_for_selector('main', timeout=5000)
+                        main_text = page.locator('main').inner_text()
+                        lines = [line.strip() for line in main_text.split('\n') if line.strip()]
                         
-                        c_count = 0
-                        for j in range(comment_elements.count()):
-                            if c_count >= num_comments_to_scrape:
-                                break
-                            
-                            text_content = comment_elements.nth(j).inner_text()
-                            lines = text_content.split('\n')
-                            if len(lines) >= 2:
-                                user = lines[0]
-                                comment_text = lines[1]
+                        if len(lines) > 5 and (not caption_alt or "Photo by" in caption_alt or caption_alt == "N/A"):
+                            for i in range(min(15, len(lines))):
+                                if re.match(r'^\d+[smhdwy]$', lines[i]):
+                                    caption_alt = lines[i+1]
+                                    break
+                                        
+                        # Find all 'Reply' indices (indicate a comment's end boundary)
+                        reply_indices = [idx for idx, line in enumerate(lines) if line == 'Reply']
+                        
+                        for r_idx in reply_indices[:num_comments_to_scrape]:
+                            user = "IG User"
+                            comment_text = ""
+                            # Traverse backwards up to 15 lines to find the timestamp anchor
+                            for i in range(r_idx - 1, max(-1, r_idx - 15), -1):
+                                if re.match(r'^\d+[smhdwy]$', lines[i]):
+                                    user = lines[i-1] if i > 0 else "IG User"
+                                    raw_comment = lines[i+1:r_idx]
+                                    if len(raw_comment) > 0 and 'like' in raw_comment[-1].lower():
+                                        raw_comment = raw_comment[:-1]
+                                    comment_text = " ".join(raw_comment)
+                                    break
+                                    
+                            if comment_text:
                                 comments_list.append({"user": user, "text": comment_text})
-                                c_count += 1
                     except Exception as e:
                         print(f"  Could not extract comments: {e}")
-                    
+                        
                     posts_data.append({
-                        "post_url": full_url,
+                        "post_url": url,
                         "caption_snippet": caption_alt[:100] + "..." if caption_alt and len(caption_alt) > 100 else caption_alt,
                         "image_url": image_url,
                         "comments": comments_list
                     })
-                    
-                    # Close modal
-                    print("  Closing modal...")
-                    page.keyboard.press("Escape")
-                    smart_sleep(1, 2, probability=0.7)
-                    
                     count += 1
                     
                 except Exception as e:
-                    print(f"  Error processing post {i}: {e}")
-                    processed_indices.add(i)
-                    # Close modal if it's open
-                    try:
-                        page.keyboard.press("Escape")
-                        smart_sleep(0.5, 1, probability=0.5)
-                    except:
-                        pass
+                    print(f"  Error processing isolated post: {e}")
                     continue
+                    
+        # Branch 2: We must dynamically scroll inside Instagram standard search modal
+        else:
+            max_scroll_attempts = 30  # Prevent infinite scrolling
             
-            # Check if we found new posts
-            if not new_posts_found:
-                no_new_posts_count += 1
-                if no_new_posts_count >= 3:
-                    print(f"\nNo new posts found after {no_new_posts_count} scroll attempts.")
-                    print(f"Instagram may have limited results for this hashtag.")
-                    break
-            else:
-                no_new_posts_count = 0
-            
-            # If we need more posts, scroll down to load more
-            if count < num_posts_to_scrape:
-                print(f"Scrolling to load more posts... ({count}/{num_posts_to_scrape} collected)")
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                smart_sleep(2, 4, probability=1.0)  # Wait for new posts to load
-                scroll_attempt += 1
+            while count < num_posts_to_scrape and scroll_attempt < max_scroll_attempts:
+                # Get current post count
+                thumbnails = page.locator('a[href^=\"/p/\"]')
+                count_found = thumbnails.count()
+                
+                if scroll_attempt == 0:
+                    print(f"Initially detected {count_found} posts on page")
+                
+                # Process new posts
+                new_posts_found = False
+                for i in range(count_found):
+                    if count >= num_posts_to_scrape:
+                        break
+                    
+                    # Skip already processed posts
+                    if i in processed_indices:
+                        continue
+                        
+                    try:
+                        # Re-locate to avoid stale element errors
+                        thumbnail = thumbnails.nth(i)
+                        
+                        # Get URL to check for duplicates
+                        post_url_suffix = thumbnail.get_attribute("href")
+                        if not post_url_suffix or post_url_suffix in unique_links:
+                            processed_indices.add(i)
+                            continue
+                        
+                        unique_links.add(post_url_suffix)
+                        processed_indices.add(i)
+                        new_posts_found = True
+                        
+                        print(f"Processing post {count + 1}/{num_posts_to_scrape}...")
+                        
+                        # Scroll into view
+                        thumbnail.scroll_into_view_if_needed()
+                        smart_sleep(0.5, 1, probability=0.3)
+                        
+                        full_url = f"https://www.instagram.com{post_url_suffix}"
+                        
+                        # Click to open modal
+                        thumbnail.click()
+                        smart_sleep(2, 3, probability=1.0)
+                        
+                        # Extract Data from Modal
+                        try:
+                            modal_img = page.locator('img').nth(1) if page.locator('img').count() > 1 else page.locator('img').nth(0)
+                            image_url = modal_img.get_attribute("src")
+                            caption_alt = modal_img.get_attribute("alt")
+                        except:
+                            image_url = "N/A"
+                            caption_alt = "N/A"
+                        
+                        # Extract comments via Text Layout Parsing
+                        print("  Extracting comments via Text Parsing...")
+                        comments_list = []
+                        try:
+                            import re
+                            modal_loc = page.locator('div[role="dialog"]')
+                            if modal_loc.count() > 0:
+                                container = modal_loc.nth(0)
+                            else:
+                                container = page.locator('main').nth(0) if page.locator('main').count() > 0 else page.locator('body')
+                            
+                            modal_text = container.inner_text()
+                            lines = [line.strip() for line in modal_text.split('\n') if line.strip()]
+                            
+                            if len(lines) > 5 and (not caption_alt or "Photo by" in caption_alt or caption_alt == "N/A"):
+                                for i in range(min(15, len(lines))):
+                                    if re.match(r'^\d+[smhdwy]$', lines[i]):
+                                        caption_alt = lines[i+1]
+                                        break
+                                        
+                            reply_indices = [idx for idx, line in enumerate(lines) if line == 'Reply']
+                            
+                            for r_idx in reply_indices[:num_comments_to_scrape]:
+                                user = "IG User"
+                                comment_text = ""
+                                for i in range(r_idx - 1, max(-1, r_idx - 15), -1):
+                                    if re.match(r'^\d+[smhdwy]$', lines[i]):
+                                        user = lines[i-1] if i > 0 else "IG User"
+                                        raw_comment = lines[i+1:r_idx]
+                                        if len(raw_comment) > 0 and 'like' in raw_comment[-1].lower():
+                                            raw_comment = raw_comment[:-1]
+                                        comment_text = " ".join(raw_comment)
+                                        break
+                                        
+                                if comment_text:
+                                    comments_list.append({"user": user, "text": comment_text})
+                        except Exception as e:
+                            print(f"  Could not extract comments: {e}")
+                        
+                        posts_data.append({
+                            "post_url": full_url,
+                            "caption_snippet": caption_alt[:100] + "..." if caption_alt and len(caption_alt) > 100 else caption_alt,
+                            "image_url": image_url,
+                            "comments": comments_list
+                        })
+                        
+                        # Close modal
+                        print("  Closing modal...")
+                        page.keyboard.press("Escape")
+                        smart_sleep(1, 2, probability=0.7)
+                        
+                        count += 1
+                        
+                    except Exception as e:
+                        print(f"  Error processing post {i}: {e}")
+                        processed_indices.add(i)
+                        # Close modal if it's open
+                        try:
+                            page.keyboard.press("Escape")
+                            smart_sleep(0.5, 1, probability=0.5)
+                        except:
+                            pass
+                        continue
+                
+                # Check if we found new posts
+                if not new_posts_found:
+                    no_new_posts_count += 1
+                    if no_new_posts_count >= 3:
+                        print(f"\nNo new posts found after {no_new_posts_count} scroll attempts.")
+                        print(f"Instagram may have limited results for this hashtag.")
+                        break
+                else:
+                    no_new_posts_count = 0
+                
+                # If we need more posts, scroll down to load more
+                if count < num_posts_to_scrape:
+                    print(f"Scrolling to load more posts... ({count}/{num_posts_to_scrape} collected)")
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    smart_sleep(2, 4, probability=1.0)  # Wait for new posts to load
+                    scroll_attempt += 1
             
         print(f"Found {len(posts_data)} posts.")
         
-        # Save to file in Resultados folder
+        # Save raw extraction to file in Resultados folder
         filename = os.path.join(output_dir, f"results_{search_query}.json")
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(posts_data, f, indent=4, ensure_ascii=False)
             
         print(f"Data saved to {filename}")
-        
         browser.close()
         end_scraping_time = time.time()
         
-        # --- Integration with NLP Pipeline ---
+        # --- UNIVERSAL NLP PIPELINE (Phases 2-4) ---
         try:
-            print("\n--- Starting Automatic Text Processing ---")
-            import procesamiento_texto
+            print("\n--- Starting Phase 2 ETL Processing ---")
+            import uuid
+            import pandas as pd
+            import datetime
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from shared.data_cleaner import ETLProcessor
+            from x_scrapper.sentiment_prep import prepare_sentiment_data_with_processed
             
-            # Reprocess all files or just the current one? 
-            # The user asked to "do the cleaning and everything else" after searching.
-            # We will process just the current result to show immediate feedback.
+            # Flatten data for ETL
+            flattened_data = []
+            for p in posts_data:
+                post_url = p.get('post_url', '')
+                post_id = post_url.split('/')[-1] if post_url and post_url != "N/A" else str(uuid.uuid4())[:8]
+                
+                # Use proxy month/year for Instagram dates
+                ig_year = args.year if args.year else datetime.datetime.now().year
+                ig_month = args.month if args.month else datetime.datetime.now().month
+                ig_ts = f"{ig_year}-{ig_month:02d}-15T12:00:00.000Z"
+                
+                # Post
+                flattened_data.append({
+                    "type": "post",
+                    "author": "IG User",
+                    "text": p.get('caption_snippet', ''),
+                    "parent_url": post_url,
+                    "timestamp": ig_ts,
+                    "item_id": post_id
+                })
+                
+                # Comments
+                for c in p.get('comments', []):
+                    comment_id = str(uuid.uuid4())[:10]
+                    flattened_data.append({
+                        "type": "comment",
+                        "author": c.get('user', 'IG User'),
+                        "text": c.get('text', ''),
+                        "parent_url": post_url,
+                        "timestamp": ig_ts,
+                        "item_id": comment_id
+                    })
+                    
+            df_raw = pd.DataFrame(flattened_data)
             
-            datos_nuevos = procesamiento_texto.cargar_datos_json(filename)
-            tokens_limpios, tokens_stemmed = procesamiento_texto.procesar_texto(datos_nuevos)
+            etl = ETLProcessor()
+            topic_kws = [search_query] if search_query else []
+            df_processed = etl.run_etl_pipeline(df_raw, platform='instagram', run_id=f"run_ig_{int(time.time())}", topic_keywords=topic_kws)
             
-            print(f"Processed {len(datos_nuevos)} new posts.")
-            
-            # Save processed data to JSON
-            processed_filename = os.path.join(output_dir, f"processed_{search_query}.json")
-            processed_data = {
-                "search_query": search_query,
-                "total_posts": len(datos_nuevos),
-                "tokens_limpios": tokens_limpios,
-                "tokens_stemmed": tokens_stemmed
-            }
-            
-            with open(processed_filename, "w", encoding="utf-8") as f:
-                json.dump(processed_data, f, indent=4, ensure_ascii=False)
-            
-            print(f"Processed text saved to: {processed_filename}")
-
-            # Save processed data to CSV
-            import csv
-            csv_filename = os.path.join(output_dir, f"processed_{search_query}.csv")
-            with open(csv_filename, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["Type", "Token"])
-                for token in tokens_limpios:
-                    writer.writerow(["Limpio", token])
-                for token in tokens_stemmed:
-                    writer.writerow(["Stemmed", token])
-            
-            print(f"Processed text saved to: {csv_filename}")
-
-            # Visualizar solo para este término
-            output_img = os.path.join(output_dir, f"frecuencia_{search_query}.png")
-            procesamiento_texto.visualizar_nube_palabras(tokens_limpios, output_img)
-            
-            print(f"Analysis complete. Image saved to: {output_img}")
-            end_text_processing_time = time.time()
-            
-            # --- Sentiment Analysis Integration ---
-            start_sentiment_time = time.time()
-            sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0}
-            total_comments_analyzed = 0
-            
+            # Filter noise
+            if 'is_noise' in df_processed.columns:
+                initial_count = len(df_processed)
+                df_processed = df_processed[~df_processed['is_noise']].copy()
+                removed = initial_count - len(df_processed)
+                if removed > 0:
+                    print(f"🧹 Noise Filter: Removed {removed} noisy comments")
+                    
+            if df_processed.empty:
+                print("⚠️ No valid data left after noise filtering. Aborting sentiment analysis.")
+                return
+                    
+            # Save Parquet Phase 2
+            staged_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'staged', 'instagram')
+            os.makedirs(staged_dir, exist_ok=True)
             try:
-                print("\n--- Starting Sentiment Analysis (DeepSeek) ---")
-                import sentiment_prep
-                import sentiment_analyzer_hf as sentiment_analyzer
-                
-                # Prepare sentiment data
-                print("Preparing sentiment data...")
-                df_sentiment = sentiment_prep.prepare_sentiment_data_instagram(filename)
-                
-                if not df_sentiment.empty:
-                    # Save sentiment input
-                    sentiment_input_path = os.path.join(output_dir, f"sentiment_input_{search_query}.csv")
-                    df_sentiment.to_csv(sentiment_input_path, index=False, encoding='utf-8')
-                    print(f"Sentiment input saved to: {sentiment_input_path}")
-                    
-                    # Generate LLM prompts
-                    prompts_path = os.path.join(output_dir, f"llm_prompts_{search_query}.csv")
-                    sentiment_prep.generate_llm_prompts_csv_instagram(df_sentiment, prompts_path)
-                    
-                    # Run sentiment analysis with Hugging Face (FREE!)
-                    print("\nAnalyzing sentiment with DeepSeek...")
-                    sentiment_results_path = os.path.join(output_dir, f"sentiment_results_{search_query}.csv")
-                    df_results = sentiment_analyzer.main_sentiment_analysis_instagram(
-                        input_csv=sentiment_input_path,
-                        output_csv=sentiment_results_path
-                    )
-                    
-                    print(f"\n✅ Sentiment analysis complete!")
-                    print(f"Results saved to: {sentiment_results_path}")
-                    
-                    # ✅ NUEVO: Generar CSV unificado en formato de investigación
-                    try:
-                        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                        from shared.unified_csv_exporter import convert_instagram_to_unified
-                        
-                        unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
-                        convert_instagram_to_unified(sentiment_results_path, unified_csv_path)
-                        print(f"📋 CSV Unificado (Formato Investigación): {unified_csv_path}")
-                    except Exception as e:
-                        print(f"⚠️  Error generando CSV unificado: {e}")
-                    
-                    # Calculate sentiment distribution
-                    if df_results is not None and not df_results.empty:
-                        total_comments_analyzed = len(df_results)
-                        sentiment_counts = df_results['sentiment'].value_counts().to_dict()
-                        sentiment_distribution['positive'] = sentiment_counts.get('POSITIVE', sentiment_counts.get('positive', 0))
-                        sentiment_distribution['negative'] = sentiment_counts.get('NEGATIVE', sentiment_counts.get('negative', 0))
-                        sentiment_distribution['neutral'] = sentiment_counts.get('NEUTRAL', sentiment_counts.get('neutral', 0))
-                else:
-                    print("No posts with comments found for sentiment analysis.")
-                    
-            except ImportError as e:
-                print(f"\n⚠️ Sentiment analysis modules not available: {e}")
-                print("Install required packages: pip install requests python-dotenv")
+                yr = args.year if args.year else df_processed['year'].mode().iloc[0] if 'year' in df_processed.columns and not df_processed['year'].isna().all() else datetime.datetime.now().year
+                mo = args.month if args.month else df_processed['month'].mode().iloc[0] if 'month' in df_processed.columns and not df_processed['month'].isna().all() else datetime.datetime.now().month
+                staged_parquet = os.path.join(staged_dir, f"{int(yr)}-{int(mo):02d}.parquet")
+                df_processed.to_parquet(staged_parquet, index=False)
+                print(f"✅ Staged Parquet saved to {staged_parquet}")
             except Exception as e:
-                print(f"\n⚠️ Error during sentiment analysis: {e}")
-                print("Make sure HUGGINGFACE_API_KEY is set in .env")
-                print("Get your FREE API key at: https://huggingface.co/settings/tokens")
+                pass
 
+            df_sentiment = prepare_sentiment_data_with_processed(df_processed)
+            df_sentiment.to_csv(os.path.join(output_dir, "sentiment_input.csv"), index=False, encoding='utf-8')
+            end_processing_time = time.time()
+            
+            # --- DeepSeek Sentiment Analysis (Phases 3 & 4) ---
+            start_sentiment_time = time.time()
+            sentiment_distribution = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
+            total_items_analyzed = 0
+            
+            print("\n" + "="*60)
+            print("Starting Automatic Sentiment Analysis with DeepSeek (Phases 3 & 4)...")
+            print("="*60)
+            
+            from shared.sentiment_analyzer import DeepSeekSentimentAnalyzer
+            analyzer = DeepSeekSentimentAnalyzer()
+            
+            # Harmonize (Phase 3)
+            df_harmonized = analyzer.harmonize_dataset(df_sentiment, platform="instagram", target_per_month=1000)
+            
+            # Robust Process (Phase 4)
+            df_results = analyzer.process_dataset_robustly(
+                df_harmonized,
+                platform="instagram",
+                text_col='post_text',
+                comments_col='comments_json'
+            )
+            
+            results_csv_path = os.path.join(output_dir, "sentiment_results.csv")
+            df_results.to_csv(results_csv_path, index=False, encoding='utf-8')
+            
+            total_items_analyzed = len(df_results)
+            if 'sentiment' in df_results.columns:
+                counts = df_results['sentiment'].value_counts().to_dict()
+                for k, v in counts.items():
+                    key = str(k).lower()
+                    if key in sentiment_distribution:
+                        sentiment_distribution[key] = int(v)
+            
+            # Formato Investigación final
+            from shared.unified_csv_exporter import convert_instagram_to_unified
+            unified_csv_path = os.path.join(output_dir, "formato_investigacion.csv")
+            convert_instagram_to_unified(results_csv_path, unified_csv_path)
+            
             end_sentiment_time = time.time()
             end_total_time = time.time()
             
             # --- PERFORMANCE METRICS REPORT ---
             scraping_duration = end_scraping_time - start_total_time
-            text_processing_duration = end_text_processing_time - end_scraping_time
+            text_processing_duration = end_processing_time - end_scraping_time
             sentiment_duration = end_sentiment_time - start_sentiment_time
             total_duration = end_total_time - start_total_time
             
-            # Count total comments
             total_comments = sum(len(post.get('comments', [])) for post in posts_data)
             
             print("\n" + "="*50)
@@ -398,21 +547,18 @@ def run(search_query=None, num_posts=None, num_comments=None):
             print("="*50)
             print(f"Total Posts Extracted:  {len(posts_data)}")
             print(f"Total Comments:         {total_comments}")
-            print(f"Comments Analyzed:      {total_comments_analyzed}")
+            print(f"Items Analyzed:         {total_items_analyzed}")
             print("-" * 50)
             print(f"1. Scraping Phase:      {scraping_duration:.2f} seconds")
-            print(f"   (Avg per post:       {scraping_duration/len(posts_data) if len(posts_data) else 0:.2f}s)")
-            print(f"2. Text Processing:     {text_processing_duration:.2f} seconds")
-            print(f"3. Sentiment Analysis:  {sentiment_duration:.2f} seconds (DeepSeek)")
-            print(f"   (Avg per comment:    {sentiment_duration/total_comments_analyzed if total_comments_analyzed else 0:.2f}s)")
+            print(f"2. Phase 2 ETL:         {text_processing_duration:.2f} seconds")
+            print(f"3. DeepSeek ML (P3-4):  {sentiment_duration:.2f} seconds")
             print("-" * 50)
             print(f"TOTAL EXECUTION TIME:   {total_duration:.2f} seconds")
             print("="*50)
             
-            # Generate metrics JSON for master scraper
             metrics = {
                 "social_network": "Instagram",
-                "llm_used": "DeepSeek",
+                "llm_used": "DeepSeek (Unified)",
                 "query": search_query,
                 "execution_times": {
                     "scraping": round(scraping_duration, 2),
@@ -423,31 +569,29 @@ def run(search_query=None, num_posts=None, num_comments=None):
                 "data_metrics": {
                     "posts_extracted": len(posts_data),
                     "comments_extracted": total_comments,
-                    "comments_analyzed": total_comments_analyzed,
-                    "total_text_items": len(posts_data) + total_comments_analyzed
+                    "items_analyzed": total_items_analyzed,
                 },
                 "sentiment_distribution": sentiment_distribution,
                 "performance_metrics": {
                     "posts_per_second": round(len(posts_data) / scraping_duration if scraping_duration > 0 else 0, 2),
-                    "comments_per_second": round(total_comments_analyzed / sentiment_duration if sentiment_duration > 0 else 0, 2),
+                    "comments_per_second": round(total_items_analyzed / sentiment_duration if sentiment_duration > 0 else 0, 2),
                     "avg_time_per_post": round(scraping_duration / len(posts_data) if len(posts_data) > 0 else 0, 2)
                 }
             }
             
-            # Save metrics JSON
             metrics_filename = os.path.join(output_dir, "metrics.json")
             with open(metrics_filename, "w", encoding="utf-8") as f:
                 json.dump(metrics, f, indent=4, ensure_ascii=False)
-            print(f"\n📊 Metrics saved to: {metrics_filename}")
-            
-            # Print metrics in JSON format for master scraper to capture
+                
             print("\n### METRICS_JSON_START ###")
             print(json.dumps(metrics, ensure_ascii=False))
             print("### METRICS_JSON_END ###")
-            
         except Exception as e:
-            print(f"Error during text processing: {e}")
+            print(f"Error during execution pipeline: {e}")
+            import traceback
+            traceback.print_exc()
 
+    return
 
 if __name__ == "__main__":
     run()
