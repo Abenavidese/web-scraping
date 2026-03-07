@@ -268,42 +268,69 @@ def convert_facebook_to_unified(sentiment_results_csv, output_csv):
 
 def convert_linkedin_to_unified(datos_extraidos_csv, output_csv):
     """
-    Convierte el CSV de LinkedIn al formato unificado
+    Convierte el CSV de LinkedIn al formato unificado (exactamente como X)
     """
     df = pd.read_csv(datos_extraidos_csv, encoding='utf-8')
     unified_data = []
     
     for _, row in df.iterrows():
-        content = row.get('content', '')
-        sentiment = row.get('sentiment_deepseek', 'neutral')
-        explanation = row.get('explanation_deepseek', '')
+        post_text = row.get('post_text', row.get('content', row.get('text', '')))
+        post_id = row.get('item_id', row.get('post_id', ''))
+        timestamp = row.get('timestamp', '')
         
-        # Extraer comentarios del JSON
-        comments_json = row.get('comments', '[]')
+        sentiment = row.get('sentiment', row.get('sentiment_deepseek', 'neutral'))
+        emotion = row.get('emotion', 'none')
+        intensity = row.get('intensity', 'none')
+        confidence = float(row.get('confidence', 0.0))
+        
+        unified_data.append({
+            'comment_id': post_id,
+            'timestamp': timestamp,
+            'year': row.get('year', ''),
+            'month': row.get('month', ''),
+            'comentario': post_text,
+            'sentimiento': sentiment,
+            'emocion': emotion,
+            'intensidad': intensity,
+            'confianza': confidence
+        })
+        
+        # Extraer comentarios si los hay
+        comments_json = row.get('comments_json', row.get('comments', '[]'))
         try:
             comments = json.loads(comments_json) if isinstance(comments_json, str) else comments_json
         except:
             comments = []
-        
-        # Si hay comentarios, crear una fila por comentario
+            
         if comments and len(comments) > 0:
             for comment in comments:
-                comment_text = comment if isinstance(comment, str) else str(comment)
+                if isinstance(comment, dict):
+                    c_text = comment.get('text', comment.get('processed_text', ''))
+                    c_id = comment.get('comment_id', '')
+                    c_timestamp = comment.get('timestamp', timestamp)
+                    c_sent = comment.get('sentiment', sentiment)
+                    c_emo = comment.get('emotion', emotion)
+                    c_int = comment.get('intensity', intensity)
+                    c_conf = comment.get('confidence', confidence)
+                else:
+                    c_text = str(comment)
+                    c_id = ''
+                    c_timestamp = timestamp
+                    c_sent = sentiment
+                    c_emo = emotion
+                    c_int = intensity
+                    c_conf = confidence
+                    
                 unified_data.append({
-                    'publicacion': content,
-                    'comentario': comment_text,
-                    'sentimiento': sentiment,
-                    'explicacion': explanation,
-                    'terminos': extract_key_terms(content)
+                    'comment_id': c_id,
+                    'timestamp': c_timestamp,
+                    'year': row.get('year', ''),
+                    'month': row.get('month', ''),
+                    'comentario': c_text,
+                    'sentimiento': c_sent,
+                    'emocion': c_emo,
+                    'intensidad': c_int,
+                    'confianza': c_conf
                 })
-        else:
-            # Si no hay comentarios, usar el post
-            unified_data.append({
-                'publicacion': content,
-                'comentario': content,
-                'sentimiento': sentiment,
-                'explicacion': explanation,
-                'terminos': extract_key_terms(content)
-            })
-    
+                
     return create_unified_csv(unified_data, 'LinkedIn', output_csv)

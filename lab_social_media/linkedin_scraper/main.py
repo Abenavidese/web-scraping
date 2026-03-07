@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 #     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from scrapers.linkedin_scraper import LinkedInScraper
-from utils.nlp_processor import NLPProcessor
-from utils.llm_processor import LLMAnalyzer
 import config 
 import time
 import os
@@ -31,9 +29,6 @@ def slugify(text):
     text = re.sub(r'[-\s]+', '_', text)
     return text.strip('_')
 
-async def analyze_post_concurrently(llm_analyzer, clean_text, network="LinkedIn", provider="grok"):
-    """Wrapper para análisis LLM asíncrono"""
-    return llm_analyzer.analyze(clean_text, network, provider)
 
 async def main():
     parser = argparse.ArgumentParser(description="Extracción y Procesamiento de LinkedIn + Grok LLM")
@@ -97,58 +92,128 @@ async def main():
 
     print(f"   -> {len(data)} items extraídos.")
     extraction_time = time.time() - start_total_time
-
-    # 2. Fase de Procesamiento NLP & LLM
-    print("2. Ejecutando Pipeline NLP y Análisis CONCURRENTE con DeepSeek...")
-    nlp_start_time = time.time()
+    # 2. Processing and Sentiment Analysis
+    print("2. Ejecutando ETL Pipeline y Análisis con DeepSeek...")
     
-    processor = NLPProcessor(language='spanish')
-    llm_analyzer = LLMAnalyzer()
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from shared.data_cleaner import ETLProcessor
+    from shared.sentiment_analyzer import DeepSeekSentimentAnalyzer
+    import pandas as pd
     
-    all_tokens = []
+    # Prepara datos para ETL (Aplanar de estructura anidada)
+    flattened_data = []
     
-    # Lista de tareas para asyncio.gather (Concurrencia)
-    llm_tasks = []
+    # Manejo de timestamps en mock
+    from datetime import datetime
+    now = datetime.now()
+    default_year = now.year
+    default_month = now.month
     
-    # Contar comentarios totales
-    total_comments = 0
-    for item in data:
-        if 'comments' in item and item['comments']:
-            total_comments += len(item['comments'])
-    
-    print(f"   -> Total posts: {len(data)} | Total comentarios: {total_comments}")
-    
-    # Pre-procesamiento sincrónico (limpieza) - Solo Posts
-    for item in data:
-        raw_content = item['content'].replace('\n', ' ').replace('\r', '').strip()
-        clean_content = processor.clean_text(raw_content)
-        item['content'] = clean_content # Actualizamos data limpia
+    try:
+        import uuid
+        for item in data: # data from mock JSON
+            item_url = item.get('url', f"https://linkedin.com/post/{uuid.uuid4().hex[:8]}")
+            item_id = item_url.split('/')[-1] if item_url else str(uuid.uuid4())[:8]
+            
+            # Extraer año/mes de timestamp si existe, si no por defecto
+            ts = item.get('timestamp', '')
+            year, month = default_year, default_month
+            if ts:
+                try:
+                    if 'T' in str(ts):
+                        dt = datetime.strptime(str(ts).split('T')[0], "%Y-%m-%d")
+                        year, month = dt.year, dt.month
+                except:
+                    pass
+            
+            flattened_data.append({
+                "type": "post",
+                "author": item.get('author', 'Unknown'),
+                "text": item.get('content', ''),
+                "parent_url": item_url,
+                "timestamp": ts,
+                "item_id": item_id,
+                "year": year,
+                "month": month,
+                "post_id": item_id
+            })
+            
+            for comment in item.get('comments', []):
+                comment_id = str(uuid.uuid4())[:10]
+                flattened_data.append({
+                    "type": "comment",
+                    "author": "Unknown LinkedIn User",
+                    "text": comment,
+                    "parent_url": item_url,
+                    "timestamp": ts,
+                    "item_id": comment_id,
+                    "year": year,
+                    "month": month,
+                    "post_id": item_id
+                })
+    except Exception as e:
+        print(f"Error aplanando datos: {e}")
         
-        # Guardamos tokens para BoW (incluir comentarios)
-        tokens = processor.process(clean_content)
-        all_tokens.extend(tokens)
-        
-        # Tokens de comentarios para BoW
-        if 'comments' in item and item['comments']:
-            for comment in item['comments']:
-                clean_comment = processor.clean_text(comment)
-                tokens_comment = processor.process(clean_comment)
-                all_tokens.extend(tokens_comment)
-        
-        # Preparamos Tarea LLM solo para el POST
-        llm_tasks.append(analyze_post_concurrently(llm_analyzer, clean_content, "LinkedIn", "deepseek"))
-
-    # Ejecución Concurrente del LLM
-    print(f"   -> Enviando {len(llm_tasks)} peticiones concurrentes a DeepSeek...")
-    llm_results = await asyncio.gather(*llm_tasks)
+    df_raw = pd.DataFrame(flattened_data)
     
-    # Asignar resultados a la data
-    for i, (sentiment, explanation) in enumerate(llm_results):
-        data[i]['sentiment_deepseek'] = sentiment
-        data[i]['explanation_deepseek'] = explanation
-        print(f"   [{i+1}] Sentimiento: {sentiment} | Exp: {explanation[:50]}...")
+    if df_raw.empty:
+        print("No hay datos extraidos.")
+        return
+        
+    etl = ETLProcessor()
+    topic_kws = [args.query] if args.query else []
+    try:
+        df_processed = etl.run_etl_pipeline(df_raw, platform='linkedin', run_id=f"run_li_{int(time.time())}", topic_keywords=topic_kws)
+    except Exception as e:
+        print(f"Error in ETL pipeline: {e}")
+        df_processed = df_raw.copy()
+        
+    try:
+        analyzer = DeepSeekSentimentAnalyzer()
+        
+        # Analyze sentiments using the precise fields
+        sentiments = []
+        emotions = []
+        intensities = []
+        confidences = []
+        reasonings = []
+        
+        for idx, row in df_processed.iterrows():
+            text_to_analyze = row.get('processed_text', row.get('text', ''))
+            print(f"Analyzing [{idx+1}/{len(df_processed)}]...")
+            
+            if not text_to_analyze or str(text_to_analyze).strip() == '':
+                sentiments.append('neutral')
+                emotions.append('none')
+                intensities.append('none')
+                confidences.append(0.0)
+                reasonings.append('No text analyzed')
+                continue
+                
+            res = analyzer.analyze_individual(text_to_analyze)
+            sentiments.append(res.get('sentiment', 'unknown'))
+            emotions.append(res.get('emotion', 'none'))
+            intensities.append(res.get('intensity', 'none'))
+            confidences.append(res.get('confidence', 0.0))
+            reasonings.append(res.get('reasoning', 'No reasoning provided'))
+            
+            print(f" -> {res.get('sentiment', 'unknown')} | {res.get('emotion', 'none')} | {res.get('intensity', 'none')} ({res.get('confidence', 0.0)})")
+            
+        df_processed['sentiment'] = sentiments
+        df_processed['emotion'] = emotions
+        df_processed['intensity'] = intensities
+        df_processed['confidence'] = confidences
+        df_processed['explanation_deepseek'] = reasonings
+        df_processed['sentiment_deepseek'] = sentiments
+        
+    except Exception as e:
+        print(f"Error analyzer: {e}")
 
+    # Convertir a estructura antigua de data/csv para guardar compatibilidad
+    data = df_processed.to_dict('records')
+    
     # 3. Reporte y Visualización
+
     print("3. Generando Reporte...")
     
     csv_file = os.path.join(output_dir, 'datos_extraidos_deepseek.csv')
@@ -181,18 +246,7 @@ async def main():
         except Exception as e:
             print(f"   ⚠️  Error generando CSV unificado: {e}")
 
-    # Visualización (BoW)
-    bow = processor.get_bag_of_words(all_tokens)
-    if bow:
-        common_words = bow.most_common(10)
-        words, counts = zip(*common_words)
-        plt.figure(figsize=(10, 6))
-        plt.bar(words, counts, color='lightgreen')
-        plt.xlabel('Palabras')
-        plt.ylabel('Frecuencia')
-        plt.title(f'Top Palabras - {args.query}')
-        plt.savefig(os.path.join(output_dir, 'frecuencia_palabras.png'))
-        print(f"   [Gráfico] {output_dir}/frecuencia_palabras.png")
+    # Optional Visualization block disabled to preserve original workflow structure
     
     total_time = time.time() - start_total_time
     nlp_time = total_time - extraction_time
@@ -219,6 +273,8 @@ async def main():
             sentiment_distribution["negative"] += 1
         else:
             sentiment_distribution["neutral"] += 1
+    # Calculate total comments
+    total_comments = sum(len(item.get('comments', [])) for item in data)
     
     # Generate metrics JSON for master scraper
     metrics = {

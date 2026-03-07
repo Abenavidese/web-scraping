@@ -461,9 +461,8 @@ class LinkedInScraper(SocialScraper):
 
             try:
                 print(f"[{self.__class__.__name__}] Buscando '{query}' en LinkedIn...")
-                # Búsqueda optimizada
-                enhanced_query = f"{query} AND (el OR la OR en OR que)"
-                encoded_query = enhanced_query.replace(" ", "%20")
+                # Búsqueda exacta como pide el usuario
+                encoded_query = query.replace(" ", "%20")
                 search_url = f"https://www.linkedin.com/search/results/content/?keywords={encoded_query}&origin=SWITCH_SEARCH_VERTICAL"
                 
                 try:
@@ -480,6 +479,13 @@ class LinkedInScraper(SocialScraper):
                      print(f"[{self.__class__.__name__}] ⚠️ ERROR: Login requerido. La cookie puede ser inválida.")
                      return []
 
+                print(f"[{self.__class__.__name__}] Debug: URL reached -> {page.url}")
+                await page.screenshot(path="linkedin_search_debug.jpg")
+                
+                html_content = await page.content()
+                with open("debug.html", "w", encoding="utf-8") as f:
+                    f.write(html_content)
+
                 # --- BUCLE PRINCIPAL DE EXTRACCIÓN ---
                 no_new_data_counter = 0
                 max_retries_no_data = 10  # Reducido de 30 a 10 para ser más rápido
@@ -488,54 +494,65 @@ class LinkedInScraper(SocialScraper):
                 
                 while len(results) < limit:
                     # Buscar items en el DOM actual
-                    post_items = await page.locator(".search-results-container .artdeco-card, div.feed-shared-update-v2").all()
-                    
+                    # Actualizamos selectores según la estructura obtenida
+                    # [data-view-name="feed-full-update"] es el nuevo contenedor principal
+                    post_items = await page.locator(".search-results-container .artdeco-card, div.feed-shared-update-v2, div[data-view-name='feed-full-update']").all()
+
                     new_in_this_pass = 0
-                    
-                    # [..LOOP CONTENTS..]
-                    
                     for item in post_items:
                         if len(results) >= limit:
                             break
-                        
+
                         try:
-                            # Obtener texto para hash (deduplicación)
-                            text_el = item.locator("div.update-components-text, div.feed-shared-update-v2__description-wrapper").first
-                            if await text_el.count() == 0:
-                                continue
-                                
-                            raw_text = await text_el.inner_text()
-                            post_hash = hash(raw_text[:100])
-                            
-                            if post_hash in seen_hashes:
-                                continue # Ya procesado
-                            
-                            # Filtro Idioma RELAJADO - solo verificar que tenga algo de contenido
-                            # Removemos el filtro estricto de español para no perder posts
-                            if len(raw_text.strip()) < 10:  # Solo verificar que tenga contenido mínimo
+                            # Extraer URN del contenedor o enlaces internos
+                            post_urn = await item.get_attribute("data-urn")
+                            if not post_urn:
+                                # Intentar extraer URN de enlaces internos si no lo tiene en la raíz
+                                urn_links = await item.locator("a[href*='urn:li:activity']").all()
+                                if urn_links:
+                                    href = await urn_links[0].get_attribute("href")
+                                    import re
+                                    match = re.search(r"urn:li:activity:\d+", href)
+                                    if match:
+                                        post_urn = match.group(0)
+
+                            if post_urn and post_urn in seen_hashes:
+                                continue  # Ya extraído
+
+                            # Extraer texto principal
+                            post_text_loc = item.locator(".feed-shared-update-v2__description-wrapper, .update-components-text, span.break-words, span.update-components-text, [data-view-name='feed-commentary']").first
+                            post_text = ""
+                            if await post_text_loc.count() > 0:
+                                post_text = await post_text_loc.inner_text()
+                            else:
+                                # Fallback si no encuentra selector exacto
+                                post_text = (await item.inner_text()).split('\n')[0] 
+
+                            if not post_text.strip() or len(post_text.strip()) < 10:
                                 continue
 
                             # Marcar visto
-                            seen_hashes.add(post_hash)
+                            seen_hashes.add(post_urn if post_urn else hash(post_text[:100])) 
                             
-                            # Expandir 'ver más' (sin delay)
+                            # Expandir 'ver más' (sin delay largo)
                             try:
                                 see_more = item.locator("button.feed-shared-inline-show-more-text__see-more-less-toggle").first
                                 if await see_more.is_visible():
                                     await see_more.click()
-                                    await asyncio.sleep(0.3)  # Reducido de 0.5
+                                    await asyncio.sleep(0.3)
                             except: pass
                             
-                            # Re-leer texto completo
-                            post_text = await text_el.inner_text()
+                            # Re-leer texto completo después de posible clic en "ver más"
+                            if await post_text_loc.count() > 0:
+                                post_text = await post_text_loc.inner_text()
                             
                             # Autor
                             author = "Desconocido"
-                            author_el = item.locator(".update-components-actor__name span[aria-hidden='true'], .update-components-actor__title span[aria-hidden='true']").first
+                            author_el = item.locator(".update-components-actor__name span[aria-hidden='true'], .update-components-actor__title span[aria-hidden='true'], span.update-components-actor__name, span.feed-shared-actor__name").first
                             if await author_el.count() > 0:
                                 author = await author_el.inner_text()
 
-                            # Comentarios (OPCIONAL - solo si se pide)
+                            # Comentarios (OPCIONAL)
                             comments_list = []
                             if max_comments > 0:
                                 comments_list = await self._extract_comments(page, item, max_comments)
@@ -553,7 +570,7 @@ class LinkedInScraper(SocialScraper):
                         except Exception as e:
                             continue
                             
-                    # Verificar progreso
+                    # Verificar progreso después de procesar todos los posts en pantalla
                     if len(results) >= limit:
                         print(f"   [!] Meta alcanzada ({len(results)}/{limit}).")
                         break
@@ -562,11 +579,13 @@ class LinkedInScraper(SocialScraper):
                         no_new_data_counter += 1
                         print(f"   ...scrolleando (Intento {no_new_data_counter}/{max_retries_no_data} sin nuevos posts)...")
                         
-                        # Wiggle Strategy: Subir un poco y volver a bajar (solo cada 2 intentos)
-                        if no_new_data_counter % 2 == 0:
-                            await page.mouse.wheel(0, -400)  # Reducido
-                            await asyncio.sleep(0.5)  # Reducido
-                            await page.mouse.wheel(0, 600)  # Reducido
+                        # Aggressive scrolling to force load
+                        try:
+                            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                            await asyncio.sleep(1)
+                            await page.keyboard.press("PageDown")
+                            await asyncio.sleep(1)
+                        except: pass
                         
                         if no_new_data_counter >= max_retries_no_data:
                             print("   [!] No aparecen más resultados nuevos. Terminando.")
@@ -574,11 +593,11 @@ class LinkedInScraper(SocialScraper):
                     else:
                         no_new_data_counter = 0
                         print(f"   ...scrolleando para buscar más...")
-
-                    # Scroll MÁS RÁPIDO
-                    await self._scroll_page(page)
-                    # Delay mínimo entre scrolls
-                    await self._human_delay(500, 1000, chance=0.5)  # Reducido significativamente
+                        # Scroll para cargar siguientes resultados
+                        try:
+                            await page.evaluate("window.scrollBy(0, 800)")
+                            await asyncio.sleep(0.5)
+                        except: pass
 
             except Exception as e:
                 print(f"Error crítico en scraper: {e}")
