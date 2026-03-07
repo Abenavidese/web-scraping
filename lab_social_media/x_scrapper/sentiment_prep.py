@@ -99,6 +99,10 @@ def prepare_sentiment_data_with_processed(df_processed):
             'post_processed': post.get('text_clean_semantic', post['text']),
             'post_intensity': post.get('text_clean_intensity', ''),
             'post_url': post_url,
+            # Preserve temporal metadata for downstream harmonization/export
+            'timestamp': post.get('timestamp', post.get('normalized_timestamp', '')),
+            'year': post.get('year', ''),
+            'month': post.get('month', ''),
             'num_comments': len(comment_texts),
             
             # Comentarios originales

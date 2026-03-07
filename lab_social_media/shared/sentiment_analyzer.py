@@ -49,6 +49,18 @@ class SentimentAnalysis(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
 
+def _pydantic_schema(model_cls):
+    """
+    Return JSON schema for both Pydantic v2 and v1.
+    v2 -> model_json_schema()
+    v1 -> schema()
+    """
+    if hasattr(model_cls, "model_json_schema"):
+        return model_cls.model_json_schema()
+    if hasattr(model_cls, "schema"):
+        return model_cls.schema()
+    return {}
+
 class DeepSeekSentimentAnalyzer:
     """Centralized sentiment analyzer using DeepSeek API with Pydantic validation"""
     
@@ -179,7 +191,7 @@ class DeepSeekSentimentAnalyzer:
             "Tu tarea es analizar el texto suministrado en el contexto de un POST (y posiblemente sus COMENTARIOS).\n"
             "Identifica el sentimiento predominante, la emoción primaria y su intensidad.\n"
             "Debes responder ÚNICAMENTE con un JSON válido que cumpla con este esquema exacto:\n"
-            f"{json.dumps(SentimentAnalysis.model_json_schema(), ensure_ascii=False)}\n\n"
+            f"{json.dumps(_pydantic_schema(SentimentAnalysis), ensure_ascii=False)}\n\n"
             "No incluyas texto extra, ni bloques de código (```json). SOLO el objeto JSON."
         )
         

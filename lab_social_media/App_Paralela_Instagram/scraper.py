@@ -48,6 +48,199 @@ def format_hashtag(query):
     # If no spaces, return as-is (single word)
     return query
 
+def _is_profile_text(text):
+    """Detect avatar/profile placeholder text from Instagram UI."""
+    if not text:
+        return False
+    low = text.lower()
+    return ("profile picture" in low) or ("foto del perfil" in low)
+
+def _extract_text_from_li(li):
+    """Extract user/comment from a single Instagram comment row."""
+    try:
+        user = li.locator("h3, a[href^='/']").first.inner_text().strip()
+    except Exception:
+        user = "IG User"
+
+    try:
+        raw_lines = [x.strip() for x in li.inner_text().split("\n") if x.strip()]
+    except Exception:
+        raw_lines = []
+
+    cleaned = []
+    for line in raw_lines:
+        low = line.lower()
+        if user and line == user:
+            continue
+        if _is_profile_text(line):
+            continue
+        if low in {"reply", "responder", "like", "me gusta", "follow", "seguir", "edited", "editado"}:
+            continue
+        if re.fullmatch(r"\d+[smhdwy]", low):
+            continue
+        if re.fullmatch(r"\d+\s+likes?", low):
+            continue
+        if re.fullmatch(r"\d+\s+me gusta", low):
+            continue
+        cleaned.append(line)
+
+    return user if user else "IG User", " ".join(cleaned).strip()
+
+def _is_timestamp_line(line):
+    if not line:
+        return False
+    low = line.lower().strip()
+    return re.fullmatch(r"\d+\s*(s|m|h|d|w|y|sem)", low) is not None
+
+def _clean_segment_lines(lines):
+    cleaned = []
+    for line in lines:
+        low = line.lower().strip()
+        if not low:
+            continue
+        if _is_profile_text(line):
+            continue
+        if low in {
+            "responder", "reply", "seguir", "follow",
+            "editado", "edited", "ver traducción", "see translation",
+            "más", "more", "me gusta", "like"
+        }:
+            continue
+        if re.fullmatch(r"\d+\s+likes?", low):
+            continue
+        if re.fullmatch(r"\d+\s+me gusta", low):
+            continue
+        cleaned.append(line)
+    return cleaned
+
+def _parse_main_text(main_text, num_comments_to_scrape):
+    lines = [x.strip() for x in main_text.split("\n") if x and x.strip()]
+    ts_idx = [i for i, line in enumerate(lines) if _is_timestamp_line(line)]
+    if not ts_idx:
+        return "N/A", []
+
+    entries = []
+    for pos, idx in enumerate(ts_idx):
+        next_idx = ts_idx[pos + 1] if pos + 1 < len(ts_idx) else len(lines)
+
+        # Guess user scanning backward near timestamp.
+        user = "IG User"
+        for b in range(idx - 1, max(-1, idx - 6), -1):
+            cand = lines[b].strip()
+            low = cand.lower()
+            if not cand or low in {"•", "editado", "edited", "seguir", "follow"}:
+                continue
+            if _is_timestamp_line(cand):
+                continue
+            if _is_profile_text(cand):
+                continue
+            user = cand
+            break
+
+        segment = lines[idx + 1:next_idx]
+        segment = _clean_segment_lines(segment)
+        text = " ".join(segment).strip()
+        if text:
+            entries.append({"user": user, "text": text})
+
+    if not entries:
+        return "N/A", []
+
+    caption = entries[0]["text"]
+    comments = entries[1:1 + num_comments_to_scrape]
+    return caption, comments
+
+def _extract_relative_datetimes(container):
+    """
+    Extract datetime values from relative time labels (e.g. '157 sem', '3 h').
+    Order is preserved as rendered in the page.
+    """
+    datetimes = []
+    try:
+        time_nodes = container.locator("time[datetime]")
+        for i in range(time_nodes.count()):
+            node = time_nodes.nth(i)
+            label = (node.inner_text() or "").strip()
+            dt = node.get_attribute("datetime")
+            if dt and _is_timestamp_line(label):
+                datetimes.append(dt)
+    except Exception:
+        pass
+    return datetimes
+
+def extract_post_payload(page, num_comments_to_scrape):
+    """
+    Extract a post's image/caption/comments from the post article.
+    Avoids grabbing profile-avatar text as caption.
+    """
+    image_url = "N/A"
+    caption_text = "N/A"
+    comments_list = []
+    post_timestamp = None
+
+    container = None
+    try:
+        page.wait_for_selector("main", timeout=8000)
+        container = page.locator("main").first
+    except Exception:
+        pass
+
+    # Prefer non-avatar post image/caption from current layout.
+    try:
+        imgs = page.locator("main img")
+        if imgs.count() == 0:
+            imgs = page.locator("img")
+        img_count = imgs.count()
+        fallback_src = "N/A"
+        fallback_alt = "N/A"
+        for i in range(min(img_count, 12)):
+            img = imgs.nth(i)
+            src = img.get_attribute("src")
+            alt = img.get_attribute("alt")
+            if src and fallback_src == "N/A":
+                fallback_src = src
+                fallback_alt = alt if alt else "N/A"
+            if not src:
+                continue
+            if alt and "photo by" not in alt.lower() and _is_profile_text(alt):
+                continue
+            if alt and _is_profile_text(alt):
+                continue
+            image_url = src
+            caption_text = alt if alt else "N/A"
+            break
+
+        if image_url == "N/A":
+            image_url = fallback_src
+            caption_text = fallback_alt
+    except Exception:
+        pass
+
+    try:
+        if container is not None and container.count() > 0:
+            main_text = container.inner_text()
+            parsed_caption, parsed_comments = _parse_main_text(main_text, num_comments_to_scrape)
+            if parsed_caption and parsed_caption != "N/A" and not _is_profile_text(parsed_caption):
+                caption_text = parsed_caption
+            comments_list = parsed_comments
+
+            # Map rendered relative-time timestamps:
+            # first timestamp is usually caption/post, next ones are comments.
+            dt_values = _extract_relative_datetimes(container)
+            if dt_values:
+                post_timestamp = dt_values[0]
+                for idx, comment in enumerate(comments_list):
+                    if idx + 1 < len(dt_values):
+                        comment["timestamp"] = dt_values[idx + 1]
+    except Exception:
+        pass
+
+    # Final safety for caption.
+    if _is_profile_text(caption_text):
+        caption_text = "N/A"
+
+    return image_url, caption_text, comments_list, post_timestamp
+
 def run(search_query=None, num_posts=None, num_comments=None):
     import time
     start_total_time = time.time()
@@ -207,57 +400,14 @@ def run(search_query=None, num_posts=None, num_comments=None):
                     print(f"Processing dated post {count + 1}/{len(unique_links)}: {url}")
                     page.goto(url)
                     smart_sleep(2, 3, probability=1.0)
-                    
-                    # Wait for image rendering
-                    try:
-                        page.wait_for_selector('img', timeout=5000)
-                        modal_img = page.locator('img').nth(0)
-                        image_url = modal_img.get_attribute("src")
-                        caption_alt = modal_img.get_attribute("alt")
-                    except:
-                        image_url = "N/A"
-                        caption_alt = "N/A"
-                        
-                    # Extract comments via Text Layout Parsing
-                    print("  Extracting comments via Text Parsing...")
-                    comments_list = []
-                    try:
-                        import re
-                        page.wait_for_selector('main', timeout=5000)
-                        main_text = page.locator('main').inner_text()
-                        lines = [line.strip() for line in main_text.split('\n') if line.strip()]
-                        
-                        if len(lines) > 5 and (not caption_alt or "Photo by" in caption_alt or caption_alt == "N/A"):
-                            for i in range(min(15, len(lines))):
-                                if re.match(r'^\d+[smhdwy]$', lines[i]):
-                                    caption_alt = lines[i+1]
-                                    break
-                                        
-                        # Find all 'Reply' indices (indicate a comment's end boundary)
-                        reply_indices = [idx for idx, line in enumerate(lines) if line == 'Reply']
-                        
-                        for r_idx in reply_indices[:num_comments_to_scrape]:
-                            user = "IG User"
-                            comment_text = ""
-                            # Traverse backwards up to 15 lines to find the timestamp anchor
-                            for i in range(r_idx - 1, max(-1, r_idx - 15), -1):
-                                if re.match(r'^\d+[smhdwy]$', lines[i]):
-                                    user = lines[i-1] if i > 0 else "IG User"
-                                    raw_comment = lines[i+1:r_idx]
-                                    if len(raw_comment) > 0 and 'like' in raw_comment[-1].lower():
-                                        raw_comment = raw_comment[:-1]
-                                    comment_text = " ".join(raw_comment)
-                                    break
-                                    
-                            if comment_text:
-                                comments_list.append({"user": user, "text": comment_text})
-                    except Exception as e:
-                        print(f"  Could not extract comments: {e}")
+                    print("  Extracting comments via article selectors...")
+                    image_url, caption_alt, comments_list, post_timestamp = extract_post_payload(page, num_comments_to_scrape)
                         
                     posts_data.append({
                         "post_url": url,
                         "caption_snippet": caption_alt[:100] + "..." if caption_alt and len(caption_alt) > 100 else caption_alt,
                         "image_url": image_url,
+                        "post_timestamp": post_timestamp,
                         "comments": comments_list
                     })
                     count += 1
@@ -313,59 +463,14 @@ def run(search_query=None, num_posts=None, num_comments=None):
                         # Click to open modal
                         thumbnail.click()
                         smart_sleep(2, 3, probability=1.0)
-                        
-                        # Extract Data from Modal
-                        try:
-                            modal_img = page.locator('img').nth(1) if page.locator('img').count() > 1 else page.locator('img').nth(0)
-                            image_url = modal_img.get_attribute("src")
-                            caption_alt = modal_img.get_attribute("alt")
-                        except:
-                            image_url = "N/A"
-                            caption_alt = "N/A"
-                        
-                        # Extract comments via Text Layout Parsing
-                        print("  Extracting comments via Text Parsing...")
-                        comments_list = []
-                        try:
-                            import re
-                            modal_loc = page.locator('div[role="dialog"]')
-                            if modal_loc.count() > 0:
-                                container = modal_loc.nth(0)
-                            else:
-                                container = page.locator('main').nth(0) if page.locator('main').count() > 0 else page.locator('body')
-                            
-                            modal_text = container.inner_text()
-                            lines = [line.strip() for line in modal_text.split('\n') if line.strip()]
-                            
-                            if len(lines) > 5 and (not caption_alt or "Photo by" in caption_alt or caption_alt == "N/A"):
-                                for i in range(min(15, len(lines))):
-                                    if re.match(r'^\d+[smhdwy]$', lines[i]):
-                                        caption_alt = lines[i+1]
-                                        break
-                                        
-                            reply_indices = [idx for idx, line in enumerate(lines) if line == 'Reply']
-                            
-                            for r_idx in reply_indices[:num_comments_to_scrape]:
-                                user = "IG User"
-                                comment_text = ""
-                                for i in range(r_idx - 1, max(-1, r_idx - 15), -1):
-                                    if re.match(r'^\d+[smhdwy]$', lines[i]):
-                                        user = lines[i-1] if i > 0 else "IG User"
-                                        raw_comment = lines[i+1:r_idx]
-                                        if len(raw_comment) > 0 and 'like' in raw_comment[-1].lower():
-                                            raw_comment = raw_comment[:-1]
-                                        comment_text = " ".join(raw_comment)
-                                        break
-                                        
-                                if comment_text:
-                                    comments_list.append({"user": user, "text": comment_text})
-                        except Exception as e:
-                            print(f"  Could not extract comments: {e}")
+                        print("  Extracting comments via article selectors...")
+                        image_url, caption_alt, comments_list, post_timestamp = extract_post_payload(page, num_comments_to_scrape)
                         
                         posts_data.append({
                             "post_url": full_url,
                             "caption_snippet": caption_alt[:100] + "..." if caption_alt and len(caption_alt) > 100 else caption_alt,
                             "image_url": image_url,
+                            "post_timestamp": post_timestamp,
                             "comments": comments_list
                         })
                         
@@ -435,6 +540,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
                 ig_year = args.year if args.year else datetime.datetime.now().year
                 ig_month = args.month if args.month else datetime.datetime.now().month
                 ig_ts = f"{ig_year}-{ig_month:02d}-15T12:00:00.000Z"
+                post_ts = p.get('post_timestamp') or ig_ts
                 
                 # Post
                 flattened_data.append({
@@ -442,7 +548,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
                     "author": "IG User",
                     "text": p.get('caption_snippet', ''),
                     "parent_url": post_url,
-                    "timestamp": ig_ts,
+                    "timestamp": post_ts,
                     "item_id": post_id
                 })
                 
@@ -454,7 +560,7 @@ def run(search_query=None, num_posts=None, num_comments=None):
                         "author": c.get('user', 'IG User'),
                         "text": c.get('text', ''),
                         "parent_url": post_url,
-                        "timestamp": ig_ts,
+                        "timestamp": c.get('timestamp', post_ts),
                         "item_id": comment_id
                     })
                     
