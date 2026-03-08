@@ -268,40 +268,65 @@ def convert_facebook_to_unified(sentiment_results_csv, output_csv):
     unified_data = []
     
     for _, row in df.iterrows():
-        # Extracción global (si fuese un solo post analizado en batch)
-        # DeepSeekSentimentAnalyzer arroja resultados a nivel de la fila de entrada.
-        post_text = row.get('post_text', '') 
-        post_processed = row.get('post_processed', '')
-        
-        # Validar si el análisis se hizo a nivel de elemento único (hacia donde apunta el refactor)
-        # o si aún viene con la lista 'comments_json' anidada sin desenrollar.
-        # Si la fase 2 aplicó el aplanamiento, ya no deberían existir comments_json anidados.
-        
-        # Tratamiento unificado asumiendo filas aplanadas (como X y el ETL actual de facebook):
         sentiment = row.get('sentiment', 'neutral')
         emotion = row.get('emotion', 'none')
         intensity = row.get('intensity', 'none')
         confidence = row.get('confidence', 0.0)
-        
-        # Identificadores unificados generados por el ETL
-        item_id = str(row.get('item_id', row.get('comment_id', '')))
-        timestamp = str(row.get('timestamp', ''))
+
+        row_ts = str(row.get('timestamp', ''))
         year = str(row.get('year', ''))
         month = str(row.get('month', ''))
-        
-        # Corrección año/mes y generación de timestamp forzado para Facebook (si se perdió en la cascada)
-        if year == '2026': year = '2023'
+
+        # Parsear comentarios estructurados para exportar 1 fila por comentario real
+        comments_json = row.get('comments_json', '[]')
+        try:
+            comments = json.loads(comments_json) if isinstance(comments_json, str) else comments_json
+        except Exception:
+            comments = []
+
+        if comments and len(comments) > 0:
+            for comment in comments:
+                if isinstance(comment, dict):
+                    c_id = str(comment.get('comment_id', ''))
+                    c_text = comment.get('processed_text', comment.get('text', ''))
+                    c_ts = str(comment.get('timestamp', row_ts))
+                else:
+                    c_id = ''
+                    c_text = str(comment)
+                    c_ts = row_ts
+
+                if c_ts.lower() == 'nan' or not c_ts.strip():
+                    clean_year = year if year and year.lower() != 'nan' else '2023'
+                    clean_month = month.zfill(2) if month and month.lower() != 'nan' else '01'
+                    c_ts = f"{clean_year}-{clean_month}-15T12:00:00.000Z"
+
+                unified_data.append({
+                    'comment_id': c_id,
+                    'timestamp': c_ts,
+                    'year': year,
+                    'month': month,
+                    'comentario': c_text,
+                    'sentimiento': sentiment,
+                    'emocion': emotion,
+                    'intensidad': intensity,
+                    'confianza': confidence
+                })
+            continue
+
+        # Fallback: si no hay comments_json, preservar comportamiento previo con texto del post
+        post_text = row.get('post_text', '')
+        post_processed = row.get('post_processed', '')
+        text_col = row.get('text_clean_semantic', row.get('text', ''))
+        if pd.isna(text_col) or str(text_col).strip() == '':
+            text_col = post_processed if pd.notna(post_processed) and post_processed else post_text
+
+        timestamp = row_ts
         if timestamp.lower() == 'nan' or not timestamp.strip():
-            # Fabricar timestamp proxy para que timestamp_missing sea 'false'
             clean_year = year if year and year.lower() != 'nan' else '2023'
             clean_month = month.zfill(2) if month and month.lower() != 'nan' else '01'
             timestamp = f"{clean_year}-{clean_month}-15T12:00:00.000Z"
-        
-        # Manejo de campos dependiendo de si es post o comentario aplanado
-        text_col = row.get('text_clean_semantic', row.get('text', ''))
-        if pd.isna(text_col) or str(text_col).strip() == '':
-             text_col = post_processed if pd.notna(post_processed) and post_processed else post_text
 
+        item_id = str(row.get('item_id', row.get('comment_id', '')))
         unified_data.append({
             'comment_id': item_id,
             'timestamp': timestamp,
@@ -318,56 +343,71 @@ def convert_facebook_to_unified(sentiment_results_csv, output_csv):
 
 def convert_linkedin_to_unified(datos_extraidos_csv, output_csv):
     """
-    Convierte el CSV de LinkedIn (Post ETL) al formato unificado de investigación
+    Convierte el CSV de LinkedIn al formato unificado (exactamente como X)
     """
     df = pd.read_csv(datos_extraidos_csv, encoding='utf-8')
     unified_data = []
     
     for _, row in df.iterrows():
-        # Text retrieval prioritization (processed text > raw text)
-        text_col = row.get('text_clean_semantic', row.get('text', row.get('post_text', row.get('content', ''))))
+        post_text = row.get('post_text', row.get('content', row.get('text', '')))
+        post_id = row.get('item_id', row.get('post_id', ''))
+        timestamp = row.get('timestamp', '')
         
-        import emoji
-        
-        # Identifiers
-        item_id = str(row.get('item_id', row.get('post_id', row.get('comment_id', ''))))
-        timestamp = str(row.get('timestamp', ''))
-        year = str(row.get('year', ''))
-        month = str(row.get('month', ''))
-        
-        # Corrección año/mes si son Strings NaN
-        if year.lower() == 'nan' or not year.strip(): year = '2023'
-        
-        # Demojize
-        try:
-            text_col = emoji.demojize(text_col, language='es')
-        except:
-            try:
-                text_col = emoji.demojize(text_col)
-            except:
-                pass
-        
-        if timestamp.lower() == 'nan' or not timestamp.strip():
-            clean_year = year if year else '2023'
-            clean_month = month.zfill(2) if month and month.lower() != 'nan' else '01'
-            timestamp = f"{clean_year}-{clean_month}-01"
-            
-        # Sentiment properties
-        sentiment = row.get('sentiment', 'neutral')
+        sentiment = row.get('sentiment', row.get('sentiment_deepseek', 'neutral'))
         emotion = row.get('emotion', 'none')
         intensity = row.get('intensity', 'none')
         confidence = float(row.get('confidence', 0.0))
         
         unified_data.append({
-            'comment_id': item_id,
+            'comment_id': post_id,
             'timestamp': timestamp,
-            'year': year,
-            'month': month,
-            'comentario': text_col,
+            'year': row.get('year', ''),
+            'month': row.get('month', ''),
+            'comentario': post_text,
             'sentimiento': sentiment,
             'emocion': emotion,
             'intensidad': intensity,
             'confianza': confidence
         })
         
+        # Extraer comentarios si los hay
+        comments_json = row.get('comments_json', row.get('comments', '[]'))
+        try:
+            comments = json.loads(comments_json) if isinstance(comments_json, str) else comments_json
+        except:
+            comments = []
+            
+        if comments and len(comments) > 0:
+            for comment in comments:
+                if isinstance(comment, dict):
+                    c_text = comment.get('text', comment.get('processed_text', ''))
+                    c_id = comment.get('comment_id', '')
+                    c_timestamp = comment.get('timestamp', timestamp)
+                    c_sent = comment.get('sentiment', sentiment)
+                    c_emo = comment.get('emotion', emotion)
+                    c_int = comment.get('intensity', intensity)
+                    c_conf = comment.get('confidence', confidence)
+                else:
+                    c_text = str(comment)
+                    c_id = ''
+                    c_timestamp = timestamp
+                    c_sent = sentiment
+                    c_emo = emotion
+                    c_int = intensity
+                    c_conf = confidence
+                    
+                unified_data.append({
+                    'comment_id': c_id,
+                    'timestamp': c_timestamp,
+                    'year': row.get('year', ''),
+                    'month': row.get('month', ''),
+                    'comentario': c_text,
+                    'sentimiento': c_sent,
+                    'emocion': c_emo,
+                    'intensidad': c_int,
+                    'confianza': c_conf
+                })
+                
     return create_unified_csv(unified_data, 'LinkedIn', output_csv)
+
+
