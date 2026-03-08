@@ -427,13 +427,13 @@ class LinkedInScraper(SocialScraper):
             
         return comments
 
-    async def extract(self, query: str, limit: int = 10, max_comments: int = 0) -> List[Dict]:
+    async def extract(self, query: str, limit: int = 10, max_comments: int = 0, year: int = None, month: int = None) -> List[Dict]:
         results = []
         seen_hashes = set()
         
         async with async_playwright() as p:
-            # 1. Lanzar navegador
-            browser = await p.chromium.launch(headless=self.headless, slow_mo=50)
+            # 1. Lanzar navegador (preferir Edge para evitar detecciones básicas)
+            browser = await p.chromium.launch(headless=self.headless, slow_mo=50, channel="msedge")
             
             # 2. Configurar contexto
             context = await browser.new_context(
@@ -452,13 +452,8 @@ class LinkedInScraper(SocialScraper):
             
             page = await context.new_page()
 
-            # --- NITRO MODE: BLOQUEO DE RECURSOS PESADOS ---
-            # Bloqueamos imágenes, fuentes y multimedia para acelerar la carga.
-            await page.route("**/*", lambda route: route.abort() 
-                if route.request.resource_type in ["image", "media", "font"] 
-                else route.continue_()
-            )
-
+            # (Se ha eliminado el "Nitro Mode" de bloqueo de recursos para evitar crashes 
+            # internos de Playwright con el Captcha de Google y sus iframes cruzados)
             try:
                 print(f"[{self.__class__.__name__}] Buscando '{query}' en LinkedIn...")
                 # Búsqueda exacta como pide el usuario
@@ -478,6 +473,184 @@ class LinkedInScraper(SocialScraper):
                 if "login" in page.url or "signup" in page.url:
                      print(f"[{self.__class__.__name__}] ⚠️ ERROR: Login requerido. La cookie puede ser inválida.")
                      return []
+                     
+                # Custom Search Strategy based on Exact Dates (Google Dorks)
+                unique_links = set()
+                
+                if year and month:
+                    print(f"[{self.__class__.__name__}] Aplicando Filtro de Fecha Estricto (Google Dorks: {year}-{month:02d})...")
+                    import urllib.parse
+                    import calendar
+                    
+                    # Generar query Dork para posts en LinkedIn
+                    dork_query = f'site:linkedin.com/posts/ "{query}"'
+                    
+                    # Obtener último día del mes
+                    _, last_day = calendar.monthrange(year, month)
+                    
+                    # Formato tbs (mm/dd/yyyy)
+                    min_date = f"{month}/1/{year}"
+                    max_date = f"{month}/{last_day}/{year}"
+                    tbs_param = f"cdr:1,cd_min:{min_date},cd_max:{max_date}"
+                    
+                    google_url = f"https://www.google.com/search?q={urllib.parse.quote(dork_query)}&tbs={urllib.parse.quote(tbs_param)}"
+                    
+                    # Evasión de Bot: Navegar a la página principal de Google primero
+                    print(f"[{self.__class__.__name__}] Navegando a la página principal de Google (Evasión de Bots)...")
+                    try:
+                        await page.goto("https://www.google.com/", timeout=40000)
+                        await asyncio.sleep(random.uniform(2, 4))
+                        
+                        # Opcional: Aceptar cookies de Google si aparece el banner
+                        accept_btn = page.locator("button:has-text('Accept all'), button:has-text('Aceptar todo')").first
+                        if await accept_btn.count() > 0 and await accept_btn.is_visible():
+                            await accept_btn.click(timeout=3000)
+                            await asyncio.sleep(1)
+                    except Exception as e:
+                        pass # Ignore pre-flight errors
+                        
+                    print(f"[{self.__class__.__name__}] Ejecutando Dork: {google_url}")
+                    await page.goto(google_url, timeout=60000)
+                    await asyncio.sleep(2)
+                    
+                    print("\n⚠️  [INTERVENCIÓN REQUERIDA] ")
+                    print("Es muy probable que Google haya lanzado un CAPTCHA.")
+                    print("1. Revisa la ventana del navegador.")
+                    print("2. Resuelve el Captcha si existe.")
+                    input("3. Presiona [ENTER] aquí en la consola CUANDO HAYAS TERMINADO y la página de resultados sea visible...")
+                    
+                    # Extraer links de Google
+                    page_idx = 0
+                    while len(unique_links) < limit and page_idx < 5:
+                        try:
+                            await page.wait_for_selector("div#search a", timeout=5000)
+                        except:
+                            print("No se encontraron resultados de búsqueda estándar de Google.")
+                            break
+                            
+                        links = await page.locator("div#search a[href*='linkedin.com/posts/']").all()
+                        for link in links:
+                            href = await link.get_attribute('href')
+                            if href and 'linkedin.com/posts/' in href and not 'google.com' in href:
+                                clean_url = href.split('?')[0] if '?' in href else href
+                                unique_links.add(clean_url)
+                                
+                        if len(unique_links) >= limit:
+                            break
+                            
+                        # Siguiente página en Google
+                        next_btn = page.locator("a#pnnext")
+                        if await next_btn.count() > 0:
+                            await next_btn.first.click()
+                            await asyncio.sleep(2)
+                            page_idx += 1
+                        else:
+                            break
+                            
+                    print(f"[{self.__class__.__name__}] Google Dorking encontró {len(unique_links)} enlaces con fechas estrictas.")
+                    
+                    # Ahora extraer esos enlaces específicos
+                    for url in list(unique_links)[:limit]:
+                        try:
+                            print(f"[{self.__class__.__name__}] Extrayendo post fechado: {url}")
+                            await page.goto(url)
+                            await asyncio.sleep(3)
+                            
+                            # Identificar contenedor principal
+                            item = page.locator(".core-rail, main, .feed-shared-update-v2").first
+                            if await item.count() == 0:
+                                continue
+                                
+                            post_text_loc = item.locator(".feed-shared-update-v2__description-wrapper, .update-components-text, span.break-words, span.update-components-text, [data-view-name='feed-commentary']").first
+                            post_text = ""
+                            if await post_text_loc.count() > 0:
+                                post_text = await post_text_loc.inner_text()
+                            else:
+                                post_text = (await item.inner_text()).split('\n')[0] 
+
+                            if not post_text.strip() or len(post_text.strip()) < 10:
+                                continue
+                                
+                            # Expandir 'ver más'
+                            try:
+                                see_more = item.locator("button.feed-shared-inline-show-more-text__see-more-less-toggle").first
+                                if await see_more.is_visible():
+                                    await see_more.click()
+                                    await asyncio.sleep(0.3)
+                            except: pass
+                            
+                            if await post_text_loc.count() > 0:
+                                post_text = await post_text_loc.inner_text()
+                                
+                            # Autor
+                            author = "Desconocido"
+                            author_el = item.locator(".update-components-actor__name span[aria-hidden='true'], span.update-components-actor__name").first
+                            if await author_el.count() > 0:
+                                author = await author_el.inner_text()
+                                
+                            # Timestamp (Fecha relativa o absoluta)
+                            timestamp_str = f"{year}-{month:02d}-01"  # Default fallback a la fecha de búsqueda
+                            try:
+                                # Buscar textos como "1 sem", "2 d", "5 h", "Ayer", etc.
+                                time_el = item.locator(".update-components-actor__sub-description-t-black--light span[aria-hidden='true'], time, .update-components-actor__sub-description").first
+                                if await time_el.count() > 0:
+                                    raw_time = await time_el.inner_text()
+                                    if raw_time and len(raw_time.strip()) > 0:
+                                        from datetime import datetime
+                                        from dateutil.relativedelta import relativedelta
+                                        import re
+                                        
+                                        clean_str = raw_time.strip().lower().split('•')[0].strip()
+                                        num_match = re.search(r'\d+', clean_str)
+                                        
+                                        if num_match:
+                                            val = int(num_match.group())
+                                            # En vez de restar a 2026 (hoy), restamos desde la fecha ancla del dork para dar realismo a posts retroactivos
+                                            from dateutil.parser import parse
+                                            anchor_date = datetime(year=year if year else datetime.utcnow().year, 
+                                                                   month=month if month else datetime.utcnow().month, 
+                                                                   day=1)
+                                            now = anchor_date
+                                            
+                                            if 'año' in clean_str or 'yr' in clean_str or 'y' in clean_str.split():
+                                                dt = now - relativedelta(years=val)
+                                            elif 'mes' in clean_str or 'mo' in clean_str:
+                                                dt = now - relativedelta(months=val)
+                                            elif 'sem' in clean_str or 'w' in clean_str.split():
+                                                dt = now - relativedelta(weeks=val)
+                                            elif 'd' in clean_str and 'día' not in clean_str and 'dia' not in clean_str:
+                                                dt = now - relativedelta(days=val)
+                                            elif 'h' in clean_str and 'hoy' not in clean_str:
+                                                dt = now - relativedelta(hours=val)
+                                            elif 'm' in clean_str and 'mes' not in clean_str:
+                                                dt = now - relativedelta(minutes=val)
+                                            else:
+                                                dt = now - relativedelta(days=val) # fallback a días
+                                                
+                                            timestamp_str = dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                                        elif 'ayer' in clean_str or 'yesterday' in clean_str:
+                                            anchor_date = datetime(year=year if year else datetime.utcnow().year, month=month if month else datetime.utcnow().month, day=2)
+                                            dt = anchor_date - relativedelta(days=1)
+                                            timestamp_str = dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                            except Exception as e:
+                                pass
+
+                            comments_list = []
+                            if max_comments > 0:
+                                comments_list = await self._extract_comments(page, item, max_comments)
+
+                            results.append({
+                                "source": "LinkedIn Post",
+                                "title": f"Post de {author}",
+                                "content": post_text,
+                                "timestamp": timestamp_str,
+                                "comments": comments_list,
+                                "url": url 
+                            })
+                        except Exception as e:
+                            print(f"Error procesando post {url}: {e}")
+                            
+                    return results
 
                 print(f"[{self.__class__.__name__}] Debug: URL reached -> {page.url}")
                 await page.screenshot(path="linkedin_search_debug.jpg")

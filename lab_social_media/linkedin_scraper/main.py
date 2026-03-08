@@ -35,6 +35,8 @@ async def main():
     parser.add_argument("--query", type=str, default=None, help="Término de búsqueda")
     parser.add_argument("--posts", type=int, default=config.DEFAULT_LIMIT, help="Número de posts a extraer")
     parser.add_argument("--comments", type=int, default=0, help="Número de comentarios por post")
+    parser.add_argument("--year", type=int, default=None, help="Año para el filtrado")
+    parser.add_argument("--month", type=int, default=None, help="Mes para el filtrado (1-12)")
     
     args = parser.parse_args()
     start_total_time = time.time()
@@ -55,9 +57,18 @@ async def main():
             if comments_input.strip().isdigit():
                 args.comments = int(comments_input.strip())
                 
+            year_input = input(f"¿Año (Opcional, dejar vacío para omitir fecha)? ")
+            if year_input.strip().isdigit():
+                args.year = int(year_input.strip())
+                month_input = input(f"¿Mes (1-12) (Opcional, dejar vacío para omitir)? ")
+                if month_input.strip().isdigit():
+                    args.month = int(month_input.strip())
+                
         except OSError:
              args.query = config.DEFAULT_QUERY
              args.comments = 0
+             args.year = None
+             args.month = None
     
     # -------------------------
 
@@ -67,6 +78,12 @@ async def main():
     # User system configuration
     user_id = os.getenv("USER_ID", "default")
     query_slug = slugify(args.query)
+    
+    # Adaptar formato de directorio al de X si usa fechas
+    if args.year and args.month:
+        import calendar
+        _, last_day = calendar.monthrange(args.year, args.month)
+        query_slug = f"{query_slug}_since{args.year}_{args.month:02d}_01_until{args.year}_{args.month:02d}_{last_day}"
     
     # Create output directory with user system structure
     output_dir = os.path.join("..", "users", user_id, "linkedin", query_slug)
@@ -84,7 +101,7 @@ async def main():
     scraper = LinkedInScraper(li_at_cookie=config.LINKEDIN_LI_AT_COOKIE, headless=False)
     
     print("1. Extrayendo datos de LinkedIn...")
-    data = await scraper.extract(args.query, limit=args.posts, max_comments=args.comments)
+    data = await scraper.extract(args.query, limit=args.posts, max_comments=args.comments, year=args.year, month=args.month)
     
     if not data:
         print("No se encontraron datos.")
@@ -103,17 +120,21 @@ async def main():
     # Prepara datos para ETL (Aplanar de estructura anidada)
     flattened_data = []
     
-    # Manejo de timestamps en mock
+    # Manejo de timestamps
     from datetime import datetime
     now = datetime.now()
-    default_year = now.year
-    default_month = now.month
+    default_year = args.year if args.year else now.year
+    default_month = args.month if args.month else now.month
     
     try:
         import uuid
+        import zlib
         for item in data: # data from mock JSON
             item_url = item.get('url', f"https://linkedin.com/post/{uuid.uuid4().hex[:8]}")
-            item_id = item_url.split('/')[-1] if item_url else str(uuid.uuid4())[:8]
+            raw_id = item_url.split('/')[-1] if item_url else str(uuid.uuid4())[:8]
+            
+            # Forzamos un ID Entero puro al igual que X usando CRC32 (evitando colisiones básicas)
+            item_id = str(abs(zlib.crc32(raw_id.encode("utf-8"))))
             
             # Extraer año/mes de timestamp si existe, si no por defecto
             ts = item.get('timestamp', '')
@@ -139,7 +160,8 @@ async def main():
             })
             
             for comment in item.get('comments', []):
-                comment_id = str(uuid.uuid4())[:10]
+                comment_uuid = str(uuid.uuid4())
+                comment_id = str(abs(zlib.crc32(comment_uuid.fallback.encode("utf-8"))) if hasattr(comment_uuid, 'fallback') else abs(zlib.crc32(comment_uuid.encode('utf-8'))))
                 flattened_data.append({
                     "type": "comment",
                     "author": "Unknown LinkedIn User",
