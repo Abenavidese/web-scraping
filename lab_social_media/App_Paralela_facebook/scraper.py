@@ -248,27 +248,33 @@ def run():
         posts_data = []
         
         # Selectors for Facebook posts on the search page
-        articles = page.locator(post_selectors).all()
+        articles_locator = page.locator(post_selectors)
+        total_candidates = articles_locator.count()
         
-        if len(articles) == 0:
+        if total_candidates == 0:
              print("\nError: 0 posts found. Your session might be invalid or expired.")
              print("Try deleting 'auth_fb.json' to force a new login.\n")
              # Print debug
              body_text = page.inner_text("body")[:200].replace("\n", " ")
              print(f"  Page preview: {body_text}")
-             
-        print(f"Processing up to {num_posts_to_scrape} items from {len(articles)} found elements...")
+        
+        # Facebook mutates/removes feed nodes dynamically; inspect a larger live window.
+        candidate_limit = min(total_candidates, max(num_posts_to_scrape * 3, num_posts_to_scrape))
+        print(f"Processing up to {num_posts_to_scrape} valid posts from {candidate_limit}/{total_candidates} candidate elements...")
 
         
         count = 0
         seen_captions = set()
-        for i, article in enumerate(articles):
+        for i in range(candidate_limit):
             if count >= num_posts_to_scrape:
                 break
                 
             try:
+                # Re-query each index on every loop to avoid stale element references.
+                article = page.locator(post_selectors).nth(i)
+                article.wait_for(state="attached", timeout=4000)
                 # Scroll article into view
-                article.scroll_into_view_if_needed()
+                article.scroll_into_view_if_needed(timeout=6000)
                 sleep_largo()
                 
                 # Check for duplicates (Robust Version)
@@ -344,6 +350,9 @@ def run():
                     if src and ("scontent" in src or "fbcdn" in src) and "/emoji.php" not in src:
                         img_url = src
                         break
+
+                # Ensure variable exists before fallback comment filters use it
+                post_text = ""
                         
                 # Extract Comments
                 print(f"  [{i+1}] Attempting to open comments (Target: {num_comments_to_scrape})...")
@@ -557,8 +566,13 @@ def run():
                     # Sentiment decoupled - will be processed after browser close
                     pass
 
+                # If Facebook does not expose a canonical URL, generate a per-post surrogate id.
+                effective_post_url = full_url
+                if not effective_post_url or effective_post_url == "N/A":
+                    effective_post_url = f"fb://synthetic/{query_slug}/{i+1}_{count+1}_{int(time.time()*1000)}"
+
                 posts_data.append({
-                    "post_url": full_url,
+                    "post_url": effective_post_url,
                     "caption_snippet": post_text[:200] if post_text else "No text found",
                     "image_url": img_url,
                     "comments": comments_list,
